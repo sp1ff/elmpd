@@ -1,0 +1,8 @@
+COPYING
+INSTALL
+Makefile.in
+README
+aclocal.m4
+autom4te.cache
+build-aux
+configure

@@ -1,0 +1,29 @@
+#+TITLE: elmpd
+#+DESCRIPTION: A tight, async mpd library 
+#+DATE: <2020-08-08 Sat 17:31>
+#+AUTHOR: sp1ff
+#+EMAIL: sp1ff@pobox.com
+#+AUTODATE: t
+#+OPTIONS: toc:nil org-md-headline-style:setext *:t ^:nil
+
+* Introduction
+
+[[https://github.com/sp1ff/elmpd][elmpd]] is a tight, asynchronous, ergonomic [[https://www.musicpd.org/][MPD]] client library in Emacs Lisp.
+
+This repository is work-in-progress. I've chosen the version number (0.1) in the hopes of conveying that.
+
+* Prerequisites
+
+Emacs 25.1.
+
+* Installing
+
+This package is only available as an Autotools tarball ATM.
+
+* Getting Started
+
+TODO: Write me!
+
+* Status & Roadmap
+
+TODO: Write me!
