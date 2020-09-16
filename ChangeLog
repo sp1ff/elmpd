@@ -1,3 +1,17 @@
+2020-09-20  Michael Herstine  <sp1ff@pobox.com>
+
+	This commit does the following:
+	    1. adds pretty printing of `elmpd-connection' instances
+
+	    2. adds the function `elmpd-clear-log'
+
+	    3. fixed a nasty bug wherein the "OK\n" response from "noidle"
+	       commands wasn't being processed correctly
+
+	    4. started a unit test suite
+
+	    5. corrects several spelling errors caught in review by riscy
+
 2020-08-08  Michael Herstine  <sp1ff@pobox.com>
 
 	Initial commit.
