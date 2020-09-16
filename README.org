@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library 
-#+DATE: <2020-08-08 Sat 17:31>
+#+DATE: <2020-09-16 Wed 09:54>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -22,8 +22,25 @@ This package is only available as an Autotools tarball ATM.
 
 * Getting Started
 
-TODO: Write me!
+Create an MPD connection by calling =elmpd-connect=; this will return an =elmpd-connection= instance immediately. Asynchronously, it will be parsing the MPD greeting message, perhaps sending an initial password, and if so requested, sending the "idle" command.
+
+There are two idioms I've seen in MPD client libraries for sending commands while receiving notifications of server-side changes:
+
+    1. just maintain two connections (e.g. [[https://github.com/vincent-petithory/mpdfav][mpdfav]]); issue the "idle" command on one, send commands on the other
+
+    2. use one connection, issue the "idle" command, and when asked to issue another command, send "noidle", issue the requested command, collect the response, and then send "idle" again (e.g. [[https://gitea.petton.fr/mpdel/libmpdel][libmpdel]]).  Note that this is not a race condition per the MPD [[https://www.musicpd.org/doc/html/protocol.html#idle][docs]] -- any server-side changes that took place while processing the command will be saved & returned on "idle"
+
+Since =elmpd= is a library, I do not make that choice here, but rather support both styles.
+
+The implementation is callback-based; each connection comes at the cost of a single socket plus whatever memory is needed to do the text processing in handling command responses.  In particular, I declined to use =tq= despite the natural fit because I didn't want to use a buffer for each connection, as well.
 
 * Status & Roadmap
 
-TODO: Write me!
+I'm using the library day in & day out with good results. The bulk of the work has been in getting the asynchronous logic right; as such it is not very featureful. It is ripe for being used to build up a more caller-friendly API:  =(something-play)= instead of:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect)))
+    (elmpd-send conn "play"))
+#+END_SRC
+
+I'm currently working on a separate package that does that as a proof-of-concept; I will publish it if I can structure it in a generic way.

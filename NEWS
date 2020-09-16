@@ -1,5 +1,19 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.1.1 build:
+
+** User-visible changes
+
+*** Added =elmpd-clear-log=
+
+*** =elmpd-connection= objects being pretty-printed in log messages
+
+** Bug fixes
+
+*** "noidle" response not being processed
+
+Fixed a nasty bug wherein the "OK\n" response from "noidle" commands wasn't being processed correctly
+
 * 0.1.0 release:
 
 Initial release.

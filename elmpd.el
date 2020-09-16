@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.0
+;; Version: 0.1.1
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -45,7 +45,7 @@
 ;;        "idle" command on one, send commands on the other
 
 ;;     2. use one connection, issue the "idle" command, and when asked
-;;        to issue another command, send "endidle", issue the
+;;        to issue another command, send "noidle", issue the
 ;;        requested command, collect the response, and then send
 ;;        "idle" again (e.g. `libmpdel').  Note that this is not a
 ;;        race condition per
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.0")
+(defconst elmpd-version "0.1.1")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -107,6 +107,43 @@
     (let ((inhibit-read-only t))
       (delete-region (point-min) (point)))))
 
+(defun elmpd--pp-truncate-string (s n)
+  "Truncate S to max length N with ellipses."
+  (let ((len (length s)))
+    (cond
+     ((<= len n) s)
+     ((> n 3) (concat (substring s 0 (- n 3)) "..."))
+     (t (substring s 0 n)))))
+
+(defvar elmpd--log-idle-cb-len 24
+  "Max length of the idle callback while pretty-printing `elmpd-connection' instances.")
+
+(defvar elmpd--log-queue-cb-len 18
+  "Max length of queue command callbacks while pretty-printing `elmpd-connection' instances.")
+
+(defun elmpd--pp-conn (conn)
+  "Pretty-print CONN to string."
+  (format
+   "#elmpd{%s %s %s}"
+   (process-name (elmpd-connection--fd conn))
+   (format
+    "(%s . %s)"
+    (prin1-to-string (car (elmpd-connection--idle conn)))
+    (elmpd--pp-truncate-string
+     (prin1-to-string (cdr (elmpd-connection--idle conn)))
+   elmpd--log-idle-cb-len))
+   (mapconcat
+    (lambda (x)
+      (format
+       "(%s%s)"
+       (car x)
+       (let ((cb (cdr x)))
+	 (if cb
+	     (format " . %s" (elmpd--pp-truncate-string (prin1-to-string cb) elmpd--log-queue-cb-len))
+	   ""))))
+    (elmpd-connection--q conn)
+    " ")))
+
 (defun elmpd-log (level fmt &rest objects)
   "Write a log message FMT at level LEVEL to the `elmpd' log buffer."
   (when (>= (elmpd--log-level-number level)
@@ -122,6 +159,13 @@
         (if (and elmpd-max-log-buffer-size
                  (> (line-number-at-pos) elmpd-max-log-buffer-size))
             (elmpd--truncate-log-buffer))))))
+
+(defun elmpd-clear-log ()
+  "Clear the `elmpd' log buffer."
+  (interactive)
+  (let ((inhibit-read-only t))
+    (with-current-buffer (elmpd-log-buffer)
+      (erase-buffer))))
 
 
 (defvar elmpd--sym-to-string
@@ -227,15 +271,15 @@ Issue the next command in the queue.  If there is none, and CONN
 is an \"idling\" connection, issue the \"idle\" command.  Else do
 nothing."
 
-  (elmpd-log 'debug "Kicking the queue for elmpd-connection %s." conn)
+  (elmpd-log 'debug "Kicking the queue for %s." (elmpd--pp-conn conn))
   (let ((idle (elmpd-connection--idle conn))
         (q (elmpd-connection--q conn)))
     (if q
         ;; Regardless of the connection type, if we have commands in
         ;; the queue; we need to kick 'em off at this point.
         (progn
-          (elmpd-log 'debug "Sending the command ``%s'' on %s."
-                     (caar (elmpd-connection--q conn)) conn)
+          (elmpd-log 'info "Sending the command ``%s'' on %s."
+                     (caar (elmpd-connection--q conn)) (elmpd--pp-conn conn))
           (process-send-string
            (elmpd-connection--fd conn)
            (format "%s\n" (caar (elmpd-connection--q conn)))))
@@ -255,8 +299,11 @@ nothing."
                     (t
                      (format
                       " %s"
-                      (cl-mapcar (lambda (x) (alist-get x elmpd--sym-to-string)) subsys)))))))
-            (elmpd-log 'debug "Issuing ``%s'' on %s." (substring cmd 0 -1) conn)
+                      (mapconcat
+                       'identity
+                       (cl-mapcar (lambda (x) (alist-get x elmpd--sym-to-string)) subsys)
+                       " ")))))))
+            (elmpd-log 'info "Issuing ``%s'' on %s." (substring cmd 0 -1) (elmpd--pp-conn conn))
             (process-send-string (elmpd-connection--fd conn) cmd))))))
 
 (defun elmpd-connection--filter (conn output)
@@ -267,8 +314,8 @@ nothing."
     (cond
      ((string-match "\\(\\(?:.\\|\n\\)*\\)\n?OK\n" buf)
       ;; Response complete, successful.
-      (elmpd-log 'debug "elmpd-connection %s received \"%s\"."
-                 conn (substring buf (match-beginning 1) (match-end 1)))
+      (elmpd-log 'debug "%s processing a response of \"%s\"."
+                 (elmpd--pp-conn conn) (substring buf (match-beginning 1) (match-end 1)))
       ;; clear buf
       (setf (elmpd-connection--inbuf conn) "")
       ;; Now, we can be here for two reasons: either a command
@@ -287,13 +334,19 @@ nothing."
         ;; conn, send "idle"; else do nothing
         (elmpd--kick-queue conn)
         (if idle-nfy
+            ;; NB we're going to send the entire response (other than
+            ;; the last line "OK\n") to the idle CB; this is
+            ;; reasonable because multiple idle events can
+            ;; accumulate-- we can get a response like:
+            ;;     changed: player
+            ;;     changed: options
+            ;; the idle CB will have to figure it out for themselves.
             (apply cb conn (substring buf (match-beginning 1) (match-end 1)) nil)
           (if cb (apply cb conn t (substring buf (match-beginning 1) (match-end 1)) nil)))))
      ((string-match "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]+\\)} \\(.*\\)\n" buf)
       ;; Response complete; failure.
       ;; 1. clear buf
-      (elmpd-log 'debug "elmpd-connection %s received \"%s\"."
-                 conn (substring buf (match-beginning 4) (match-end 4)))
+      (elmpd-log 'debug "%s received \"%s\"." (elmpd--pp-conn conn) (substring buf (match-beginning 4) (match-end 4)))
       (let ((cb (cdar (elmpd-connection--q conn))))
         (setf (elmpd-connection--inbuf conn) "")
         ;; 2. send next command; if no more commands & CONN is "idle" conn, send "idle"; else do nothing
@@ -303,7 +356,7 @@ nothing."
         (if cb (apply cb conn nil (substring buf (match-beginning 4) (match-end 4)) nil))))
      (t
       ;; Incomplete response; accumulate & continue
-      (elmpd-log 'debug "Connection %s input buffer is now \"%s\"" conn buf)
+      (elmpd-log 'debug "%s input buffer is now \"%s\"" (elmpd--pp-conn conn) buf)
       (setf (elmpd-connection--inbuf conn) buf)))))
 
 (defun elmpd--start-processing (conn)
@@ -315,9 +368,9 @@ commands may have built up in its queue."
 
   ;; Check our pre-condition...
   (if (elmpd-connection--init conn)
-      (error "Connection %s has already been initialzed" conn))
+      (error "Connection %s has already been initialzed" (elmpd--pp-conn conn)))
   ;; update our state...
-  (elmpd-log 'debug "elmpd-connection %s ready for command processing." conn)
+  (elmpd-log 'info "elmpd-connection %s ready for command processing." (elmpd--pp-conn conn))
   (set-process-filter
    (elmpd-connection--fd conn)
    (lambda (_proc output)
@@ -341,7 +394,7 @@ State Machine."
         (if (string-match "OK MPD \\([0-9]+\\)\\.\\([0-9]+\\)\\.\\([0-9]+\\)\n" buf)
 	          (progn
               ;; We got it...
-	            (elmpd-log 'debug "%s" (substring buf 0 -1))
+	            (elmpd-log 'info "%s" (substring buf 0 -1))
               ;; harvest the protocol version...
 	            (setf
 	             (elmpd-connection--proto-ver conn)
@@ -391,7 +444,7 @@ be any of the following:
           :name The name by which to refer to the underlying
                 socket (AKA network process); it will be modified
                 as necessary to make it unique; defaults to
-                \"*elmpd-connection\"
+                \"*elmpd-connection*\"
 
           :host The host on which the MPD server resides;
                 defaults first to the environment variable
@@ -450,7 +503,7 @@ as soon as possible."
          (dtor
           (make-finalizer
            (lambda ()
-             (elmpd-log 'debug "Finalizing `%s'" fd)
+             (elmpd-log 'info "Finalizing `%s'" fd)
              (delete-process fd))))
          (conn (elmpd--make-connection :fd fd :inbuf "" :finalize dtor :idle (plist-get args :subsystems))))
     (set-process-coding-system fd 'utf-8-unix 'utf-8-unix)
@@ -472,7 +525,7 @@ as soon as possible."
      (if q
          (append q (list (cons cmd cb)))
        (list (cons cmd cb))))
-    (elmpd-log 'info "Queued command \"%s\" on %s." cmd conn)
+    (elmpd-log 'info "Queued command \"%s\" on %s." cmd (elmpd--pp-conn conn))
     ;; *If* the connection is ready...
     (if (elmpd-connection--init conn)
         ;; switch based on whether it's a "idle" connection:
@@ -486,7 +539,9 @@ as soon as possible."
             (unless q
               ;; We're idling-- issue the noidle & kick off this command.
               (elmpd-log 'debug "Cancelling idle mode.")
-              (process-send-string (elmpd-connection--fd conn) "noidle\n")
+              (setf
+               (elmpd-connection--q conn)
+               (append (list (cons "noidle" nil)) (elmpd-connection--q conn)))
               (elmpd--kick-queue conn))
           ;; We have a fully constructed, "regular" connection-- that
           ;; means that either:
