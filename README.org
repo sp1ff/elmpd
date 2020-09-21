@@ -1,10 +1,13 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library 
-#+DATE: <2020-09-16 Wed 09:54>
+#+DATE: <2020-09-20 Sun 17:54>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
 #+OPTIONS: toc:nil org-md-headline-style:setext *:t ^:nil
+
+[[https://melpa.org/#/elmpd][file:https://melpa.org/packages/elmpd-badge.svg]]
+[[https://stable.melpa.org/#/elmpd][file:https://stable.melpa.org/packages/elmpd-badge.svg]]
 
 * Introduction
 
