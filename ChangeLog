@@ -1,5 +1,9 @@
 2020-09-20  Michael Herstine  <sp1ff@pobox.com>
 
+	Added MELPA badges.
+
+2020-09-20  Michael Herstine  <sp1ff@pobox.com>
+
 	This commit does the following:
 	    1. adds pretty printing of `elmpd-connection' instances
 

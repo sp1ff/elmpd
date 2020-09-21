@@ -1,5 +1,15 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.1.2 build:
+
+** Bug fixes
+
+*** No longer use regex to find successful responses
+
+For reasons unknown, the author obtusely chose to use an
+overly-complex regex to detect successful responses. This commit fixes
+that regrettable choice.
+
 * 0.1.1 build:
 
 ** User-visible changes

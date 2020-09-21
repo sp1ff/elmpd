@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library 
-#+DATE: <2020-09-20 Sun 17:54>
+#+DATE: <2020-09-26 Sat 18:41>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -21,7 +21,7 @@ Emacs 25.1.
 
 * Installing
 
-This package is only available as an Autotools tarball ATM.
+Install from MELPA. Tarballs are also available that can be installed through the usual =configure/make/make install= incantations.
 
 * Getting Started
 
@@ -36,6 +36,14 @@ There are two idioms I've seen in MPD client libraries for sending commands whil
 Since =elmpd= is a library, I do not make that choice here, but rather support both styles.
 
 The implementation is callback-based; each connection comes at the cost of a single socket plus whatever memory is needed to do the text processing in handling command responses.  In particular, I declined to use =tq= despite the natural fit because I didn't want to use a buffer for each connection, as well.
+
+* Motivation & Design Philosphy
+
+[[https://github.com/DamienCassou][Damien Cassou]], the author of [[https://github.com/mpdel/mpdel][mpdel]] and [[https://gitea.petton.fr/mpdel/libmpdel][libmpdel]], [[https://github.com/sp1ff/elmpd/issues/1][reached out]] to ask "Why elmpd?" His question prompted me to clarify my thoughts around this project & I've adapted my response here.
+
+I've looked at a few [[https://www.musicpd.org/][MPD]] clients, including [[https://github.com/mpdel/mpdel][mpdel]]. As I experimented with my workflow, however, I found myself wanting _less_ functionality: rather than interacting with a fully-featured client, I just wanted to skip to the next song while editing some code, for example. I customize my mode line heavily, and I wanted a little bit of logic to add the current track to the mode line & keep it up-to-date. I have written a companion [[https://github.com/sp1ff/mpdpopm][daemon]] to MPD that maintains ratings & play counts; I just needed a little function that would let me rate the current track while I was reading mail (in Emacs, of course!)
+
+My next move was to read through a number of client libraries for inspiration, both in C & Emacs LISP. Many of them had strong opinions on how one should talk to MPD. Having been programming MPD for a while (including simply =echo=-ing  commands to =/dev/tcp/$host/$port=), I knew this could be done simply. I spent time earlier this year learning to write asynchronous Rust, and that inspired me to see how simple I could make this using just callbacks. At the time of this writing, =elmpd= exports just two functions: =elmpd-connect= & =elmpd-send=. Each connection consumes a socket & optionally a callback-- that's it (no buffer, no transaction queue). Put another way, if other libraries are Gnus (featureful, encourages you to read your e-mail in a certain way), then elmpd is [[https://mailutils.org/][Mailutils]] (small utilities that leave it up to the user to assemble them into something useful).
 
 * Status & Roadmap
 

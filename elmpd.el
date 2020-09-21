@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.1
+;; Version: 0.1.2
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.1")
+(defconst elmpd-version "0.1.2")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -312,44 +312,46 @@ nothing."
   (let ((buf (concat (elmpd-connection--inbuf conn) output))
         (q (elmpd-connection--q conn)))
     (cond
-     ((string-match "\\(\\(?:.\\|\n\\)*\\)\n?OK\n" buf)
-      ;; Response complete, successful.
-      (elmpd-log 'debug "%s processing a response of \"%s\"."
-                 (elmpd--pp-conn conn) (substring buf (match-beginning 1) (match-end 1)))
-      ;; clear buf
-      (setf (elmpd-connection--inbuf conn) "")
-      ;; Now, we can be here for two reasons: either a command
-      ;; completed, or we're an "idling" connection and the player
-      ;; state changed.
-      (let* ((idle-nfy (if q nil t))
-             (cb
-              (if (not idle-nfy)
-                  (cdar q)
-                ;; We must have received a state change notification
-                (cdr (elmpd-connection--idle conn)))))
-        ;; pop the queue
-        (if (elmpd-connection--q conn)
-            (setf (elmpd-connection--q conn) (cdr q)))
-        ;; send next command; if no more commands & CONN is "idle"
-        ;; conn, send "idle"; else do nothing
-        (elmpd--kick-queue conn)
-        (if idle-nfy
-            ;; NB we're going to send the entire response (other than
-            ;; the last line "OK\n") to the idle CB; this is
-            ;; reasonable because multiple idle events can
-            ;; accumulate-- we can get a response like:
-            ;;     changed: player
-            ;;     changed: options
-            ;; the idle CB will have to figure it out for themselves.
-            (apply cb conn (substring buf (match-beginning 1) (match-end 1)) nil)
-          (if cb (apply cb conn t (substring buf (match-beginning 1) (match-end 1)) nil)))))
+     ((string= (substring buf -3) "OK\n")
+      (let ((rsp (substring buf 0 -3)))
+        ;; Response complete, successful.
+        (elmpd-log 'debug "%s processing a response of \"%s\"."
+                   (elmpd--pp-conn conn) rsp)
+        ;; clear BUF
+        (setf (elmpd-connection--inbuf conn) "")
+        ;; Now, we can be here for two reasons: either a command
+        ;; completed, or we're an "idling" connection and the player
+        ;; state changed.
+        (let* ((idle-nfy (if q nil t))
+               (cb
+                (if (not idle-nfy)
+                    (cdar q)
+                  ;; We must have received a state change notification
+                  (cdr (elmpd-connection--idle conn)))))
+          ;; pop the queue
+          (if (elmpd-connection--q conn)
+              (setf (elmpd-connection--q conn) (cdr q)))
+          ;; send next command; if no more commands & CONN is an
+          ;; "idle" connection, send "idle"; else do nothing
+          (elmpd--kick-queue conn)
+          (if idle-nfy
+              ;; NB we're going to send the entire response (other than
+              ;; the last line "OK\n") to the idle CB; this is
+              ;; reasonable because multiple idle events can
+              ;; accumulate-- we can get a response like:
+              ;;     changed: player
+              ;;     changed: options
+              ;; the idle CB will have to figure it out for themselves.
+              (apply cb conn rsp nil)
+            (if cb (apply cb conn t rsp nil))))))
      ((string-match "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]+\\)} \\(.*\\)\n" buf)
       ;; Response complete; failure.
-      ;; 1. clear buf
+      ;; 1. clear BUF
       (elmpd-log 'debug "%s received \"%s\"." (elmpd--pp-conn conn) (substring buf (match-beginning 4) (match-end 4)))
       (let ((cb (cdar (elmpd-connection--q conn))))
         (setf (elmpd-connection--inbuf conn) "")
-        ;; 2. send next command; if no more commands & CONN is "idle" conn, send "idle"; else do nothing
+        ;; 2. send next command; if no more commands & CONN is an
+        ;; "idle" connection, send "idle"; else do nothing
         (setf (elmpd-connection--q conn) (cdr q))
         (elmpd--kick-queue conn)
         ;; 3. invoke CB
