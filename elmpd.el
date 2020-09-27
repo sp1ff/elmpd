@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.2
+;; Version: 0.1.3
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.2")
+(defconst elmpd-version "0.1.3")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -168,7 +168,10 @@
       (erase-buffer))))
 
 
-(defvar elmpd--sym-to-string
+(define-obsolete-variable-alias 'elmpd--sym-to-string
+  'elmpd--subsys-to-string "0.1.3" "Use to more specific name.")
+
+(defvar elmpd--subsys-to-string
  '((database . "database")
    (update . "update")
    (stored . "stored_playlist")
@@ -184,6 +187,23 @@
    (neighbor . "neighbor")
    (mount . "mount"))
  "Association list from symbols to textual names of MPD sub-systems.")
+
+(defvar elmpd--string-to-subsys
+ '(("database" . database)
+   ("update" . update)
+   ("stored_playlist" . stored)
+   ("playlist" . playlist)
+   ("player" . player)
+   ("mixer" . mixer)
+   ("output" . output)
+   ("options" . options)
+   ("partition" . partition)
+   ("sticker" . sticker)
+   ("subscription" . subscription)
+   ("message" . message)
+   ("neighbor" . neighbor)
+   ("mount" . mount))
+ "Association list from textual names of MPD sub-systems to symbols.")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;                    The MPD connection entity                     ;;
@@ -295,13 +315,13 @@ nothing."
                    (cond
                     ((eq 'all subsys) "")
                     ((symbolp subsys)
-                     (format " %s" (alist-get subsys elmpd--sym-to-string)))
+                     (format " %s" (alist-get subsys elmpd--subsys-to-string)))
                     (t
                      (format
                       " %s"
                       (mapconcat
                        'identity
-                       (cl-mapcar (lambda (x) (alist-get x elmpd--sym-to-string)) subsys)
+                       (cl-mapcar (lambda (x) (alist-get x elmpd--subsys-to-string)) subsys)
                        " ")))))))
             (elmpd-log 'info "Issuing ``%s'' on %s." (substring cmd 0 -1) (elmpd--pp-conn conn))
             (process-send-string (elmpd-connection--fd conn) cmd))))))
@@ -335,14 +355,19 @@ nothing."
           ;; "idle" connection, send "idle"; else do nothing
           (elmpd--kick-queue conn)
           (if idle-nfy
-              ;; NB we're going to send the entire response (other than
-              ;; the last line "OK\n") to the idle CB; this is
-              ;; reasonable because multiple idle events can
-              ;; accumulate-- we can get a response like:
+              ;; We now expect to have a response that looks something
+              ;; like:
               ;;     changed: player
               ;;     changed: options
-              ;; the idle CB will have to figure it out for themselves.
-              (apply cb conn rsp nil)
+              ;; we map the strings "player", "options", &c to symbols.
+              (apply
+               cb
+               conn
+               (cl-mapcar
+                (lambda (line)
+                  (cdr (assoc (substring line 9) elmpd--string-to-subsys)))
+                (cl-remove "" (split-string rsp "\n") :test #'equal))
+               nil)
             (if cb (apply cb conn t rsp nil))))))
      ((string-match "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]+\\)} \\(.*\\)\n" buf)
       ;; Response complete; failure.

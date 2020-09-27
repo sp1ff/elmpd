@@ -1,5 +1,13 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.1.3 build:
+
+** User-visible changes
+
+*** Signature change for idle callbacks
+
+This commit changes the signature for idle callbacks; instead of receiving the response text ("changed: foo\nchanged: bar\n...") as its second parameter, it will now receive a list of symbols indicating the changed sub-system(s) (e.g. '(foo bar)).
+
 * 0.1.2 build:
 
 ** Bug fixes

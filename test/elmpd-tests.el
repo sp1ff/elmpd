@@ -117,7 +117,7 @@
            (port (process-contact server :service))
            (conn (elmpd-connect :host "localhost" :port port
                                 :subsystems '(all . (lambda (_conn subsys)
-                                                      (should (string= subsys "changed: player\nchanged: options\n")))))))
+                                                      (should (equal subsys '(player options))))))))
       (message "elmpd-test-idle listening on port %d" port)
       (while (accept-process-output))
       (delete-process server)

@@ -1,3 +1,20 @@
+2020-09-27  Michael Herstine  <sp1ff@pobox.com>
+
+	Resolve #3.
+	This commit changes the signature for idle callbacks; instead of
+	receiving the response text ("changed: foo\nchanged: bar\n...")
+	as its second parameter, it will now receive a list of symbols
+	indicating the changed sub-system(s) (e.g. '(foo bar)).
+
+2020-09-26  Michael Herstine  <sp1ff@pobox.com>
+
+	Resolve #2.
+	This commit changes `elfeed-connection--filter` to no longer
+	use a regex to detect a complete, succesful response, but rather
+	to simply examine the last three characters of the current buffer.
+	This results in orders-of-magnitude improvement in performance on
+	requests that produce a lot of data.
+
 2020-09-20  Michael Herstine  <sp1ff@pobox.com>
 
 	Added MELPA badges.
