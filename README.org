@@ -1,6 +1,6 @@
 #+TITLE: elmpd
-#+DESCRIPTION: A tight, async mpd library 
-#+DATE: <2020-09-26 Sat 18:41>
+#+DESCRIPTION: A tight, async mpd library in Emacs Lisp
+#+DATE: <2020-09-27 Sun 16:17>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t

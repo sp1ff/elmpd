@@ -1,5 +1,10 @@
 2020-09-27  Michael Herstine  <sp1ff@pobox.com>
 
+	Add support for local connections.
+	This commit adds a new keyword to `elmpd-connect': :local. If
+	given, it shall be the path to a Unix socket on which MPD is
+	listening.
+
 	Resolve #3.
 	This commit changes the signature for idle callbacks; instead of
 	receiving the response text ("changed: foo\nchanged: bar\n...")

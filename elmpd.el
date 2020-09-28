@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.3
+;; Version: 0.1.4
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.3")
+(defconst elmpd-version "0.1.4")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -481,6 +481,9 @@ be any of the following:
                 first to the environment variable \"MPD_PORT\",
                 then to 6600
 
+         :local Path to the Unix socket on which MPD is listening;
+                mutually exclusive with :host & :port
+
       :password If given, the \"password\" command shall be
                 issued after the initial connection is made; this
                 should only be done over an encrypted connection,
@@ -514,19 +517,29 @@ as soon as possible."
   (let* ((name
           (let ((from-arg (plist-get args :name)))
             (if from-arg from-arg "*elmpd-connection*")))
+         (local
+          (let ((from-arg (plist-get args :local)))
+            (if from-arg from-arg "/var/run/mpd/socket")))
          (host
           (let ((from-arg (plist-get args :host)))
             (if from-arg
                 from-arg
-              (let ((from-env (getenv "MPC_HOST")))
+              (let ((from-env (getenv "MPD_HOST")))
                 (if from-env from-env "localhost")))))
          (port
           (let ((from-arg (plist-get args :port)))
             (if from-arg
                from-arg
-              (let ((from-env (getenv "MPC_PORT")))
+              (let ((from-env (getenv "MPD_PORT")))
                 (if from-env from-env 6600)))))
-         (fd (open-network-stream name nil host port :nowait t :type 'plain))
+         ;; All connection parameters have been defaulted, so we can't
+         ;; tell (here) which were given & which were not. Of course,
+         ;; the server could well be listening on a Unix *and* a TCP
+         ;; socket.  We prefer the Unix socket.
+         (fd
+          (if (file-exists-p local)
+              (make-network-process :name name :remote local :nowait t)
+            (make-network-process :name name :host host :service port :nowait t)))
          (dtor
           (make-finalizer
            (lambda ()

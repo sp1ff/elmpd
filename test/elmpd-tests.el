@@ -50,7 +50,6 @@
     (should (string= short-text "fooba...")))
   (let* ((long-text "foobarsplat")
          (short-text (elmpd--pp-truncate-string long-text 2)))
-    (message "short-text: %s" short-text)
     (should (eq 2 (length short-text)))
     (should (string= short-text "fo"))))
 
@@ -157,6 +156,39 @@
                (elapsed (- (float-time end) (float-time start))))
           (message "elapsed is %f" elapsed)
           (should (< elapsed 1.0))))
+      (delete-process server)
+      (should (not (process-live-p server))))))
+
+(ert-deftest elmpd-test-local ()
+  "Trivial test of `elmpd-connection' against a local (Unix) server."
+
+  (let ((elmpd-log-level 'debug)
+        (elmpd-log-buffer-name "*elmpd-test-local*"))
+    (let* ((msgs '(("consume 1\n" . "OK\n")
+                   ("consume 2\n" . "ACK [50@1] {consume} value must be 0 or 1\n")))
+           (server
+            (make-network-process
+             :name "elmpd-test-local"
+             :server t
+             :local (format "/tmp/elmpd-tests.%d.sock" (emacs-pid))
+             :sentinel
+             (lambda (proc event)
+               (if (and (> (length event) 8)
+	                      (string= (substring event 0 9) "open from"))
+                   (process-send-string proc "OK MPD 256.256.256\n")))
+             :filter
+             (lambda (proc text)
+               (let ((in (caar msgs))
+                     (out (cdar msgs)))
+                 (setq msgs (cdr msgs))
+                 (should (string= in text))
+                 (process-send-string proc out)))))
+           (sock (process-contact server :local))
+           (conn (elmpd-connect :local sock)))
+      (message "elmpd-test-local listening on Unix socket %s" sock)
+      (elmpd-send conn "consume 1")
+      (elmpd-send conn "consume 2")
+      (while (accept-process-output))
       (delete-process server)
       (should (not (process-live-p server))))))
 
