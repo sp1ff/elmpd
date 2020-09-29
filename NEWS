@@ -1,5 +1,17 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.1.6 build
+
+** User-visible changes
+
+The `elmpd' logging facility now takes a facility field; the idea is that packages built on top of `elmpd' can re-use its logging feature while still distinguishing their log statements.
+
+* 0.1.5 build
+
+** User-visible changes
+
+Callers can explicitly rule-out local sockets by setting `elmpd-socket' to nil before calling `elmpd-connect'.
+
 * 0.1.4 build
 
 ** User-visible changes

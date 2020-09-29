@@ -33,12 +33,12 @@
   "Test the `elmpd' logging facility."
   (let ((elmpd-log-level 'info)
         (elmpd-log-buffer-name "*elmpd-test-log*"))
-    (elmpd-log 'info "%s %s %s" 'foo 'bar 'splat)
-    (elmpd-log 'debug "%s %s %s" 'x 'y 'z)
+    (elmpd-log 'info 'elmpd-test "%s %s %s" 'foo 'bar 'splat)
+    (elmpd-log 'debug 'elmpd-test "%s %s %s" 'x 'y 'z)
     (let ((text
            (with-current-buffer elmpd-log-buffer-name
              (buffer-string))))
-      (should (string-match "\\[[-0-9: ]+\\]\\[info\\] foo bar splat\n" text)))
+      (should (string-match "\\[[-0-9: ]+\\]\\[elmpd-test\\]\\[info\\] foo bar splat\n" text)))
     (elmpd-clear-log)
     (let ((text
            (with-current-buffer elmpd-log-buffer-name

@@ -1,3 +1,22 @@
+2020-09-28  Michael Herstine  <sp1ff@pobox.com>
+
+	Add facility to elmpd logging.
+	This commit adds a "facility" field to 'elmpd-log'; this will
+	allow packages built on top of `elmpd' to distinguish their
+	log statements.
+
+2020-09-28  Michael Herstine  <sp1ff@pobox.com>
+
+	Provide for explicitly selecting TCP connections.
+	This commit does two things:
+
+	    1. allows callers to explicitly rule out local connections
+	       by setting 'elmpd-socket' to nil when calling
+	       'elmpd-connect'
+	    2. also, call 'sit-for' in tests involvoing a mocked server;
+	       empirically this avoids deleting the server before all
+	       input is processed
+
 2020-09-27  Michael Herstine  <sp1ff@pobox.com>
 
 	Add support for local connections.
