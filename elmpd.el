@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.4
+;; Version: 0.1.5
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.4")
+(defconst elmpd-version "0.1.5")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -481,8 +481,10 @@ be any of the following:
                 first to the environment variable \"MPD_PORT\",
                 then to 6600
 
-         :local Path to the Unix socket on which MPD is listening;
-                mutually exclusive with :host & :port
+         :local Path to the Unix socket on which MPD is
+                listening; mutually exclusive with :host & :port;
+                this option is preferred, so to force a TCP
+                connection, pass this explicitly as nil
 
       :password If given, the \"password\" command shall be
                 issued after the initial connection is made; this
@@ -537,7 +539,7 @@ as soon as possible."
          ;; the server could well be listening on a Unix *and* a TCP
          ;; socket.  We prefer the Unix socket.
          (fd
-          (if (file-exists-p local)
+          (if (and local (file-exists-p local))
               (make-network-process :name name :remote local :nowait t)
             (make-network-process :name name :host host :service port :nowait t)))
          (dtor
