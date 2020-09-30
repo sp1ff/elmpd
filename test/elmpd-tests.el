@@ -192,6 +192,12 @@
       (delete-process server)
       (should (not (process-live-p server))))))
 
+(ert-deftest elmpd-test-connect-keywords ()
+  "Test `elmpd-connect' arg validation."
+
+  (should-error
+   (elmpd-connect :host "localhost" :port 1234 :fozhizzle 'yes)))
+
 (provide 'elmpd-tests)
 
 ;;; elmpd-tests.el ends here

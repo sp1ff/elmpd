@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2020-09-27 Sun 16:17>
+#+DATE: <2020-10-01 Thu 13:32>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -55,3 +55,5 @@ I'm using the library day in & day out with good results. The bulk of the work h
 #+END_SRC
 
 I'm currently working on a separate package that does that as a proof-of-concept; I will publish it if I can structure it in a generic way.
+
+In the meantime, interfaces should be considered unstable; they may change in breaking ways between builds.

@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.6
+;; Version: 0.1.7
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.6")
+(defconst elmpd-version "0.1.7")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -138,9 +138,15 @@
        "(%s%s)"
        (car x)
        (let ((cb (cdr x)))
-	 (if cb
-	     (format " . %s" (elmpd--pp-truncate-string (prin1-to-string cb) elmpd--log-queue-cb-len))
-	   ""))))
+	       (if cb
+	           (format " . %s"
+                     (elmpd--pp-truncate-string
+                      (prin1-to-string
+                       (if (byte-code-function-p cb) ; byte-compiled code looks ugly when printed
+                           (aref cb 2)
+                         cb))
+                      elmpd--log-queue-cb-len))
+	         ""))))
     (elmpd-connection--q conn)
     " ")))
 
@@ -294,7 +300,7 @@ use the same logging facility.  This package logs with FACILITY
 
 (defun elmpd--process-sentinel (process event)
   "Callback invoked when PROCESS experiences EVENT."
-  (elmpd--log 'info "Process: %s saw the event '%s'." process (substring event 0 -1)))
+  (elmpd--log 'info "Process: %s saw the event '%s'." (process-name process) (substring event 0 -1)))
 
 (defun elmpd--kick-queue (conn)
   "Move CONN's queue forward.
@@ -378,9 +384,10 @@ nothing."
                (cl-mapcar
                 (lambda (line)
                   (cdr (assoc (substring line 9) elmpd--string-to-subsys)))
-                (cl-remove "" (split-string rsp "\n") :test #'equal))
+                (split-string rsp "\n" t))
                nil)
-            (if cb (apply cb conn t rsp nil))))))
+            (if cb
+                (apply cb conn t rsp nil))))))
      ((string-match "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]+\\)} \\(.*\\)\n" buf)
       ;; Response complete; failure.
       ;; 1. clear BUF
@@ -527,6 +534,14 @@ command & we may need to send the \"idle\" command, if requested.
 This is all handled asynchronously; the caller is free to send
 commands through the connection & they will be queued up & sent
 as soon as possible."
+
+  ;; If the caller fat-fingered a keyword argument, tell them rather
+  ;; than fail silently.
+  (let ((args-copy args))
+    (while args-copy
+      (unless (memq (car args-copy) '(:name :host :port :local :password :subsystems))
+        (error "Unknown argument %s" (car args-copy)))
+      (setq args-copy (cddr args-copy))))
 
   (let* ((name
           (let ((from-arg (plist-get args :name)))

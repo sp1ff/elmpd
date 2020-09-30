@@ -1,3 +1,14 @@
+2020-10-01  Michael Herstine  <sp1ff@pobox.com>
+
+	Assorted improvements.
+	This commit is work-in-progress while developing other code on
+	top of the 'elmpd' library:
+
+	    1. Improve the way in which 'elmpd--pp-conn' handles byte-
+	       compiled functions
+	    2. Check all keyword arguments to 'elmpd-connect' & error
+	       on any that are unrecognzied
+
 2020-09-28  Michael Herstine  <sp1ff@pobox.com>
 
 	Add facility to elmpd logging.
