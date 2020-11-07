@@ -1,6 +1,11 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
-* 0.1.8 build
+* 0.1.9 build
+
+** Bug fixes
+
+*** Handle no current command in failure responses
+* 0.1.8 release
 
 ** User-visible changes
 

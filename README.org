@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2020-10-19 Mon 18:12>
+#+DATE: <2020-11-06 Fri 20:01>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -21,8 +21,8 @@ Emacs 25.1.
 [[https://github.com/sp1ff/elmpd][elmpd]] is available from [[https://melpa.org][MELPA]]. Tarballs are also available that can be installed through the usual incantations:
 
 #+BEGIN_SRC bash
-curl -L -O https://github.com/elmpd/archive/0.1.8.tar.gz
-tar xf elmpd-0.1.8.tar.gz && cd elmpd-0.1.8
+curl -L -O https://github.com/elmpd/archive/0.1.9.tar.gz
+tar xf elmpd-0.1.9.tar.gz && cd elmpd-0.1.9
 ./configure && make all check
 sudo make install
 #+END_SRC

@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.8
+;; Version: 0.1.9
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.8")
+(defconst elmpd-version "0.1.9")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -388,7 +388,7 @@ nothing."
                nil)
             (if cb
                 (apply cb conn t rsp nil))))))
-     ((string-match "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]+\\)} \\(.*\\)\n" buf)
+     ((string-match "^ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]*\\)} \\(.*\\)\n" buf)
       ;; Response complete; failure.
       ;; 1. clear BUF
       (elmpd--log 'debug "%s received \"%s\"." (elmpd--pp-conn conn) (substring buf (match-beginning 4) (match-end 4)))

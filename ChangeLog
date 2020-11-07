@@ -1,3 +1,7 @@
+2020-11-06  Michael Herstine  <sp1ff@pobox.com>
+
+	Bugfix: Handle no current command in failure messages.
+
 2020-10-19  Michael Herstine  <sp1ff@pobox.com>
 
 	Minor updates exclusively to documentation.

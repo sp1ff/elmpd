@@ -198,6 +198,43 @@
   (should-error
    (elmpd-connect :host "localhost" :port 1234 :fozhizzle 'yes)))
 
+(ert-deftest elmpd-test-pong ()
+  "Test a corner case I found in error handling."
+
+  (let ((elmpd-log-level 'debug)
+        (elmpd-log-buffer-name "*elmpd-test-local*"))
+    (let* ((got-error)
+           (msgs '(("ping\n" . "OK\n")
+                   ("pong\n" . "ACK [5@0] {} unknown command \"pong\"\n")))
+           (server
+            (make-network-process
+             :name "elmpd-test-pong"
+             :server t
+             :service t
+             :family 'ipv4
+             :sentinel
+             (lambda (proc event)
+               (if (and (> (length event) 8)
+	                      (string= (substring event 0 9) "open from"))
+                   (process-send-string proc "OK MPD 256.256.256\n")))
+             :filter
+             (lambda (proc text)
+               (let ((in (caar msgs))
+                     (out (cdar msgs)))
+                 (setq msgs (cdr msgs))
+                 (should (string= in text))
+                 (process-send-string proc out)))))
+           (port (process-contact server :service))
+           (conn (elmpd-connect :host "localhost" :port port)))
+      (sit-for 1)
+      (elmpd-send conn "ping")
+      (elmpd-send conn "pong" (lambda (_conn ok _text) (should (not ok)) (setq got-error t)))
+      (while (accept-process-output))
+      (delete-process server)
+      (should (not (process-live-p server)))
+      (should got-error)))
+  )
+
 (provide 'elmpd-tests)
 
 ;;; elmpd-tests.el ends here
