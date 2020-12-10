@@ -1,5 +1,10 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.2.0 build
+
+** User-visible changes
+
+*** Support for command-lists
 * 0.1.9 build
 
 ** Bug fixes

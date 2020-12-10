@@ -1,3 +1,13 @@
+2020-12-10  Michael Herstine  <sp1ff@pobox.com>
+
+	Added support for command lists.
+	'elmpd-send' callers can now give a list of strings to indicate
+	that they'd like these commands to be sent as a command list.
+	They can also optionally specify a callback "style" governing
+	how their callback will be invoked with the results of the
+	command list (one big block of text, a list of results, or
+	one response at a time, as they are received).
+
 2020-11-06  Michael Herstine  <sp1ff@pobox.com>
 
 	Bugfix: Handle no current command in failure messages.

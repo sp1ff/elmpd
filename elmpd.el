@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.1.9
+;; Version: 0.2.0
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.1.9")
+(defconst elmpd-version "0.2.0")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -121,6 +121,26 @@
 (defvar elmpd--log-queue-cb-len 18
   "Max length of queue command callbacks while pretty-printing `elmpd-connection' instances.")
 
+(defun elmpd--pp-cmd (cmd)
+  "Pretty-print CMD to string."
+  (format
+   "(%s%s)"
+   (if (elmpd-command--simple-command cmd)
+       (elmpd-command--simple-command cmd)
+     (elmpd-command--compound-command cmd))
+   (let ((cb (elmpd-command--callback cmd)))
+	   (if cb
+	       (format
+          " => %s [%s]"
+          (elmpd--pp-truncate-string
+           (prin1-to-string
+            (if (byte-code-function-p cb) ; byte-compiled code looks ugly
+                (aref cb 2)               ; when printed
+              cb))
+           elmpd--log-queue-cb-len)
+          (elmpd-command--callback-style cmd))
+	     ""))))
+
 (defun elmpd--pp-conn (conn)
   "Pretty-print CONN to string."
   (format
@@ -133,20 +153,7 @@
      (prin1-to-string (cdr (elmpd-connection--idle conn)))
    elmpd--log-idle-cb-len))
    (mapconcat
-    (lambda (x)
-      (format
-       "(%s%s)"
-       (car x)
-       (let ((cb (cdr x)))
-	       (if cb
-	           (format " . %s"
-                     (elmpd--pp-truncate-string
-                      (prin1-to-string
-                       (if (byte-code-function-p cb) ; byte-compiled code looks ugly when printed
-                           (aref cb 2)
-                         cb))
-                      elmpd--log-queue-cb-len))
-	         ""))))
+    #'elmpd--pp-cmd
     (elmpd-connection--q conn)
     " ")))
 
@@ -224,7 +231,7 @@ use the same logging facility.  This package logs with FACILITY
  "Association list from textual names of MPD sub-systems to symbols.")
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;                    The MPD connection entity                     ;;
+;;          `elmpd-connection -- the MPD connection entity          ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; Application-layer connections to MPD need to be "built-up" beyond
@@ -284,19 +291,66 @@ use the same logging facility.  This package logs with FACILITY
 ;;        some kind?
 
 (cl-defstruct
+    (elmpd-command
+     (:constructor nil) ; no default constructor
+     (:constructor elmpd--make-command)
+     (:conc-name elmpd-command--))
+  simple-command   ; single command
+  compound-command ; command-list only one of these two may be non-nil
+  callback         ; optional callback-- signature depends on the style
+  callback-style)  ; 'default, 'list or 'stream
+
+(defun elmpd--new-command (command &rest args)
+  "Construct an `elmpd-command' instance with COMMAND & ARGS.
+
+COMMAND may be either a string or a list of strings.  The second argument is
+an optional callback.  The (optional) third is the callback style; one of
+'default, 'list or 'stream."
+  (let ((cb (nth 0 args))     ; may be nil
+        (style (nth 1 args))) ; may be nil
+    (cond
+     ((stringp command)
+      (if (and style (not (eq style 'default)))
+          (error "A non-default style may not be given with a simple command"))
+      (elmpd--make-command :simple-command command :compound-command nil
+                           :callback cb :callback-style style))
+     ((listp command)
+      (elmpd--make-command :simple-command nil :compound-command command
+                           :callback cb :callback-style style))
+     (t
+      (error "Cannot make an elmpd command out of %s" command)))))
+
+(defun elmpd-command--send (cmd fd)
+  "Send `elmpd-command' CMD to FD."
+  (let ((simple-command (elmpd-command--simple-command cmd)))
+    (if simple-command
+        (process-send-string fd (concat simple-command "\n"))
+      (process-send-string
+       fd
+       (if (eq (elmpd-command--callback-style cmd) 'default)
+           "command_list_begin\n"
+         "command_list_ok_begin\n"))
+      (cl-mapc
+       (lambda (x)
+         (process-send-string fd (concat x "\n")))
+       (elmpd-command--compound-command cmd))
+      (process-send-string fd "command_list_end\n"))))
+
+(cl-defstruct
     (elmpd-connection
      (:constructor nil) ; no default constructor
      (:constructor elmpd--make-connection)
      (:conc-name elmpd-connection--))
-  fd        ; process representing our socket
-  inbuf     ; string in which MPD output is collected as it becomes
-            ; available
-  proto-ver ; MPD protocol version; only available after the greeting
-            ; has been harvested
-  init      ; nil initially, t when ready to take commands
-  finalize  ; finalizer
-  idle      ; idle configuration-- cf. `elmpd-connect' for format
-  q)        ; command queue: '((string . callback)...)
+  fd        ;; process representing our socket
+  inbuf     ;; string in which MPD output is collected as it becomes
+            ;; available
+  proto-ver ;; MPD protocol version; only available after the greeting
+            ;; has been harvested
+  init      ;; nil initially, t when ready to take commands
+  finalize  ;; finalizer
+  idle      ;; idle configuration-- cf. `elmpd-connect' for format
+  q         ;; command queue: this is a list of elmpd-command
+  rsp-list) ;; accumulated command_ok_list sub-responses
 
 (defun elmpd--process-sentinel (process event)
   "Callback invoked when PROCESS experiences EVENT."
@@ -314,13 +368,14 @@ nothing."
         (q (elmpd-connection--q conn)))
     (if q
         ;; Regardless of the connection type, if we have commands in
-        ;; the queue; we need to kick 'em off at this point.
+        ;; the queue; we need to kick 'em off at this point.  NB. we
+        ;; leave the command at the head of the queue; it will be
+        ;; popped when the command response has been completely
+        ;; received & processed.
         (progn
           (elmpd--log 'info "Sending the command ``%s'' on %s."
-                     (caar (elmpd-connection--q conn)) (elmpd--pp-conn conn))
-          (process-send-string
-           (elmpd-connection--fd conn)
-           (format "%s\n" (caar (elmpd-connection--q conn)))))
+                      (elmpd--pp-cmd (car q)) (elmpd--pp-conn conn))
+          (elmpd-command--send (car q) (elmpd-connection--fd conn)))
       ;; Otherwise, our next action depends on the connection type.
       (if idle
           ;; `idle' is a cons cell:
@@ -338,72 +393,220 @@ nothing."
                      (format
                       " %s"
                       (mapconcat
-                       'identity
+                       #'identity
                        (cl-mapcar (lambda (x) (alist-get x elmpd--subsys-to-string)) subsys)
                        " ")))))))
             (elmpd--log 'info "Issuing ``%s'' on %s." (substring cmd 0 -1) (elmpd--pp-conn conn))
             (process-send-string (elmpd-connection--fd conn) cmd))))))
 
-(defun elmpd-connection--filter (conn output)
-  "General process filter: CONN has received output OUTPUT."
+(defun elmpd--fast-find-ack (buf)
+  "Quickly find an ACK response in BUF.
 
-  (let ((buf (concat (elmpd-connection--inbuf conn) output))
-        (q (elmpd-connection--q conn)))
-    (cond
-     ((string= (substring buf -3) "OK\n")
-      (let ((rsp (substring buf 0 -3)))
-        ;; Response complete, successful.
-        (elmpd--log 'debug "%s processing a response of \"%s\"."
-                   (elmpd--pp-conn conn) rsp)
-        ;; clear BUF
-        (setf (elmpd-connection--inbuf conn) "")
-        ;; Now, we can be here for two reasons: either a command
-        ;; completed, or we're an "idling" connection and the player
-        ;; state changed.
-        (let* ((idle-nfy (if q nil t))
-               (cb
-                (if (not idle-nfy)
-                    (cdar q)
-                  ;; We must have received a state change notification
-                  (cdr (elmpd-connection--idle conn)))))
-          ;; pop the queue
-          (if (elmpd-connection--q conn)
-              (setf (elmpd-connection--q conn) (cdr q)))
-          ;; send next command; if no more commands & CONN is an
-          ;; "idle" connection, send "idle"; else do nothing
+A complete MPD error response is one which matches the follwoing
+regexp:
+
+   \"^ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]*\\)} \\(.*\\)\n\"
+
+Unfortunately, matching a regular expression against a large
+block of text can be expensive.  This function searches BUF for
+the string \"ACK\" at either the beginning of BUF or just after a
+newline.  It is used as a helper function for `elmpd--is-ack'.
+
+In performance testing over moderately large strings tens of
+kilobytes in length) I found this approach to be two orders of
+magnitude faster than regexp matching."
+  (let* ((n (length buf))
+	       (i (cl-search "ACK" buf :from-end t :end2 n)))
+    (cl-loop while i
+	     if (or (eq i 0) (string-equal (substring buf (- i 1) i) "\n")) return i
+	     do
+	     (setq n i i (cl-search "ACK" buf :from-end t :end2 n)))))
+
+(defun elmpd--is-ack (buf)
+  "Check BUF for an ACK result.
+
+Return nil if not found, else return a list of length five:
+
+  0. error number
+  1. command list number
+  2. current command
+  3. error message
+  4. response text up to the ACK line"
+
+  (let ((i (elmpd--fast-find-ack buf)))
+    (if i
+        (let* ((line (substring buf i))
+               (j
+                (string-match
+                 "ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]*\\)} \\(.*\\)\n"
+                 line)))
+          (unless j
+            (error "Unexpected ACK response %s" line))
+          (list
+           (substring line (match-beginning 1) (match-end 1))
+           (substring line (match-beginning 2) (match-end 2))
+           (substring line (match-beginning 3) (match-end 3))
+           (substring line (match-beginning 4) (match-end 4))
+           (substring buf 0 i))))))
+
+(defun elmpd--parse-sub-responses (buf)
+  "Parse command_ok_list sub-responses from BUF.  Return (list . remainder)."
+
+  (let ((lines '())
+        (i 0)
+	      (j (cl-search "list_OK\n" buf)))
+    (cl-loop while j
+	           do
+	           (if (or (eq j 0) (string-equal (substring buf (- j 1) j) "\n"))
+		             (setq lines (cons (substring
+				                            buf
+				                            i
+				                            (if (> j i) (- j 1) j))
+				                           lines)))
+	           (setq
+	            i (+ j 8)
+	            j (cl-search "list_OK\n" buf :start2 i)))
+    (cons (reverse lines) (substring buf i))))
+
+(defun elmpd-connection--filter (conn output)
+  "General process filter; CONN has received output OUTPUT."
+
+  ;; This method could be invoked for two reasons:
+  ;;
+  ;;   1. this connection was "idling", something changed on the
+  ;;      server, and we are being informed of that change in OUTPUT
+  ;;      (OUTPUT may be the complete response, the first chunk of a
+  ;;      larger response, an intermediate chunk in a larger response,
+  ;;      or the final chunk of a response that arrived in multiple
+  ;;      chunks; given the request/response nature of the MPD
+  ;;      protocol, we know that OUTPUT will always be some or all of
+  ;;      the response to the most recent "idle" command)
+  ;;
+  ;;   2. there is a request outstanding on CONN and some or all of
+  ;;      the response has arrived in OUTPUT (again OUTPUT may be the
+  ;;      complete response, the first chunk of a larger response, &c;
+  ;;      given the request/response nature of the MPD protocol, we
+  ;;      know that OUTPUT will always be some or all of the response
+  ;;      to the currently outstanding command)
+  ;;
+  ;; The algorithm:
+  ;;
+  ;;   1. let `buf' be the un-parsed response so far, icnluding OUTPUT
+  ;;      (i.e.  the remnants of previous response chunks if any with
+  ;;      OUTPUT appended thereto)
+  ;;
+  ;;   2. determine whether we have an outstanding command, whether
+  ;;      there is a callback associated with it if we do, and the
+  ;;      style of that callback if there is ('default, 'list, or
+  ;;      'stream).
+  ;;
+  ;;   3. if the response is complete
+  ;;
+  ;;      3.1. clear-out the connection's buffer, pop its queue, and
+  ;;           "kick" it
+  ;;
+  ;;      3.2. if the response is complete (i.e. "OK" or "ACK")
+  ;;
+  ;;        3.2.1. if we have an outstanding response with a callback
+  ;;               whose style is 'list or 'stream:
+  ;;
+  ;;               decompose `buf' into sub-responses & invoke the
+  ;;               callback
+  ;;
+  ;;               if the response is "ACK", invoke the callback a final
+  ;;               time with the error information
+  ;;
+  ;;        3.2.2. if we have an outstanding response with a callback
+  ;;               whose style is 'default
+  ;;
+  ;;               if the response is "OK", strip the trailing "OK\n"
+  ;;               from `buf' & invoke the callback
+  ;;
+  ;;               else invoke the callback with the error information
+  ;;
+  ;;        3.2.3. if we do not have an outstanding response, then
+  ;;               we were invoke in response to a prior "idle"
+  ;;               command; parse `buf' accordingly & invoke the
+  ;;               "idle" callback
+  ;;
+  ;;    4. else, the current response is not complete
+  ;;
+  ;;      4.1. if we have an outstanding response
+  ;;
+  ;;        4.1.1. if it has a callback whose style is 'list or
+  ;;               'stream
+  ;;
+  ;;               parse & remove any complete sub-responses from `buf' &
+  ;;               invoke the callback
+  ;;
+  ;;               4.1.1.1. if the style is 'list, update the connection's
+  ;;                        running list
+  ;;
+  ;;               4.1.1.2. else, invoke the callback for each sub-response
+  ;;
+  ;;        4.1.2. update the connection's buffer with `buf'
+
+  (let* ((buf (concat (elmpd-connection--inbuf conn) output))
+         (q (elmpd-connection--q conn))
+         (q-cb (if q (elmpd-command--callback (car q))))
+         (cb-style (if q-cb (elmpd-command--callback-style (car q))))
+         (err (elmpd--is-ack buf))
+         (ok (unless err (string= (substring buf -3) "OK\n"))))
+    (if (or err ok)
+        (progn
+          (elmpd--log 'debug "%s processing a response of \"%s\"."
+                      (elmpd--pp-conn conn) buf)
+          ;; Clear out the connection's buffer,
+          (setf (elmpd-connection--inbuf conn) "")
+          ;; pop the queue,
+          (if q (setf (elmpd-connection--q conn) (cdr q)))
+          ;; & send next command; if no more commands & CONN is an
+          ;; "idle" connection, send "idle"; else do nothing.
           (elmpd--kick-queue conn)
-          (if idle-nfy
-              ;; We now expect to have a response that looks something
-              ;; like:
-              ;;     changed: player
-              ;;     changed: options
-              ;; we map the strings "player", "options", &c to symbols.
-              (apply
-               cb
-               conn
-               (cl-mapcar
-                (lambda (line)
-                  (cdr (assoc (substring line 9) elmpd--string-to-subsys)))
-                (split-string rsp "\n" t))
-               nil)
-            (if cb
-                (apply cb conn t rsp nil))))))
-     ((string-match "^ACK \\[\\([0-9]+\\)@\\([0-9]+\\)\\] {\\([^}]*\\)} \\(.*\\)\n" buf)
-      ;; Response complete; failure.
-      ;; 1. clear BUF
-      (elmpd--log 'debug "%s received \"%s\"." (elmpd--pp-conn conn) (substring buf (match-beginning 4) (match-end 4)))
-      (let ((cb (cdar (elmpd-connection--q conn))))
-        (setf (elmpd-connection--inbuf conn) "")
-        ;; 2. send next command; if no more commands & CONN is an
-        ;; "idle" connection, send "idle"; else do nothing
-        (setf (elmpd-connection--q conn) (cdr q))
-        (elmpd--kick-queue conn)
-        ;; 3. invoke CB
-        (if cb (apply cb conn nil (substring buf (match-beginning 4) (match-end 4)) nil))))
-     (t
-      ;; Incomplete response; accumulate & continue
-      (elmpd--log 'debug "%s input buffer is now \"%s\"" (elmpd--pp-conn conn) buf)
-      (setf (elmpd-connection--inbuf conn) buf)))))
+          (cond
+           ((and cb-style (not (eq cb-style 'default)))
+            (let ((sub-rsp (elmpd--parse-sub-responses buf))) ;; (list . remainder)
+              ;; NB `(cdr sub-rsp)' should be empty/nil
+              (if (eq cb-style 'list)
+                  (progn
+                    (funcall q-cb conn t (append
+                                          (elmpd-connection--rsp-list conn)
+                                          (car sub-rsp)))
+                    (setf (elmpd-connection--rsp-list conn) nil))
+                (cl-mapc
+                 (lambda (rsp)
+                   (funcall q-cb conn t rsp))
+                 (car sub-rsp)))
+              (if err (funcall q-cb conn nil (nth 3 err)))))
+           ((and cb-style (eq cb-style 'default))
+            (if ok
+                (let ((rsp (substring buf 0 -3)))
+                  (funcall q-cb conn t rsp))
+              (funcall q-cb conn nil (nth 3 err))))
+           ((and ok (not q))
+            (funcall
+             (cdr (elmpd-connection--idle conn))
+             conn
+             (cl-mapcar
+              (lambda (line)
+                (cdr (assoc (substring line 9) elmpd--string-to-subsys)))
+              (split-string (substring buf 0 -3) "\n" t))))))
+      (if (and cb-style (not (eq cb-style 'default)))
+          (let ((sub-rsp (elmpd--parse-sub-responses buf))) ;; (list . remainder)
+            (if (eq cb-style 'list)
+                (setf
+                 (elmpd-connection--rsp-list conn)
+                 (append (elmpd-connection--rsp-list conn) (car sub-rsp)))
+              (cl-mapc
+               (lambda (rsp)
+                 (funcall q-cb conn t rsp))
+               (car sub-rsp)))
+            (elmpd--log 'debug "%s input buffer is now \"%s\"."
+                        (elmpd--pp-conn conn) (car sub-rsp))
+            (setq buf (cdr sub-rsp)))
+        (setf (elmpd-connection--inbuf conn) buf)
+        (elmpd--log 'debug "%s input buffer is now \"%s\"."
+                    (elmpd--pp-conn conn) buf)))))
 
 (defun elmpd--start-processing (conn)
   "Begin regular processing on CONN once the connection has been stood-up.
@@ -584,17 +787,20 @@ as soon as possible."
        (elmpd--constructing-filter conn output (plist-get args :password))))
     conn))
 
-(defun elmpd-send (conn cmd &optional cb)
+(defun elmpd-send (conn cmd &optional cb &rest args)
   "Send command CMD with callback CB on connection CONN."
 
-  (let ((q (elmpd-connection--q conn)))
+  (let* ((q (elmpd-connection--q conn))
+         (cb-style (plist-get args :response))
+         (cmd (elmpd--new-command cmd cb (if cb-style cb-style 'default))))
     ;; Regardless; append this command to the queue.
     (setf
      (elmpd-connection--q conn)
      (if q
-         (append q (list (cons cmd cb)))
-       (list (cons cmd cb))))
-    (elmpd--log 'info "Queued command \"%s\" on %s." cmd (elmpd--pp-conn conn))
+         (append q (list cmd))
+       (list cmd)))
+    (elmpd--log 'info "Queued command \"%s\" on %s." (elmpd--pp-cmd cmd)
+                (elmpd--pp-conn conn))
     ;; *If* the connection is ready...
     (if (elmpd-connection--init conn)
         ;; switch based on whether it's a "idle" connection:
@@ -622,6 +828,10 @@ as soon as possible."
           (unless q
             ;; We're idling-- kick off this command.
             (elmpd--kick-queue conn))))))
+
+(defun elmpd-conn-queue-size (conn)
+  "Return the present length of CONN's queue."
+  (length (elmpd-connection--q conn)))
 
 (provide 'elmpd)
 
