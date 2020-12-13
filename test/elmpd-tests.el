@@ -193,6 +193,23 @@ bar\nlist_OK\nOK\n")))
     (should (equal (car sub) '("foo" "bar")))
     (should (string= (cdr sub) "OK\n"))))
 
+(ert-deftest elmpd-test-noidle ()
+  "Test sending the noidle command."
+  (with-elmpd-test
+   "elmpd-test-noidle"
+   '((idle "player")
+     ("noidle\n" . "OK\n")
+     ("ping\n" . "pong\nOK\n"))
+   (cons 'player (lambda (_ _ _)))
+   (elmpd-log 'error 'elmpd-tests "I am in the body forms; attempting to wait for the idle command.")
+   (accept-process-output (elmpd-connection--fd conn))
+   ;; (while )
+   ;; (sit-for 1)
+   (elmpd-log 'info 'elmpd-tests "sending ping on %s..." (elmpd--pp-conn conn))
+   (elmpd-send conn "ping")
+   (elmpd-log 'info 'elmpd-tests "sending ping on %s...done." (elmpd--pp-conn conn))
+   (elmpd-log 'error 'elmpd-tests "I am leaving the body forms.")))
+
 (provide 'elmpd-tests)
 
 ;;; elmpd-tests.el ends here

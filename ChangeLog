@@ -1,3 +1,7 @@
+2020-12-13  Michael Herstine  <sp1ff@pobox.com>
+
+	BUGFIX: 'elmpd-send' was trying to send "noidle" in the old way (rather than creating an elmpd-command instance).
+
 2020-12-10  Michael Herstine  <sp1ff@pobox.com>
 
 	Added support for command lists.

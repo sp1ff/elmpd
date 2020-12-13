@@ -92,6 +92,7 @@
          (idle-state (plist-get plist :idle-state))
          (in (caar msgs))
          (out (cdar msgs)))
+    (elmpd-log 'info 'mock-server "mock-server: %s|%s|%s|%s" text in out idle-state)
     (if (and (symbolp in) (eq in 'idle))
         ;; We're expecting an "idle" message.
         (if idle-state
@@ -109,8 +110,8 @@
           ;; be waiting for us in `text' as well.
           (let* ((lines (split-string text "\n" t))
                  (line (car lines)))
-            (should
-             (string= (concat "idle " (mapconcat 'identity out " ")) line))
+            (should (string= (concat "idle " (mapconcat 'identity out " ")) line))
+            (setq lines (cdr lines))
             ;; If we're here, we got the expected "idle"
             ;; message-- anything else waiting for us?
             (if lines
@@ -125,8 +126,10 @@
               ;; The "noidle" didn't show up in this
               ;; message-- record the fact that we're
               ;; expecting it next.
-              (plist-put plist :idle-state t))
-            (set-process-plist proc plist)))
+              (plist-put plist :idle-state t)
+              (plist-put plist :msgs (cdr msgs))
+              (set-process-plist proc plist)
+              (elmpd-log 'debug 'mock-server "process plist is now %s" (process-plist proc)))))
       ;; Not expecting an "idle" message-- accumulate the response,
       ;; check it once it's complete, then send the response.
       (let* ((buf (plist-get plist :buf))
@@ -183,12 +186,15 @@ TODO(sp1ff): document CONVO."
             :subsystems ,idle-spec)))
      (unwind-protect
          (progn ,@body)
+       (accept-process-output (elmpd-connection--fd conn) 0)
        (let ((count 0))
          (while (not finished)
            ;; I can't find an documentation on this, but calling `sit-for'
            ;; seems essential to processing  the input.
            (sit-for 2)
+           (accept-process-output (elmpd-connection--fd conn) 0)
            (setq count (1+ count))
+           (elmpd-log 'info 'mock-server "%d: %s" count (elmpd--pp-conn conn))
            ;; Fail-safe to prevent deadlock
            (should (< count 8))))
        (should (eq 0 (elmpd-conn-queue-size conn)))

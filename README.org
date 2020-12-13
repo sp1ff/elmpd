@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2020-12-10 Thu 09:10>
+#+DATE: <2020-12-13 Sun 13:24>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -23,8 +23,8 @@ The simplest way to install [[https://github.com/sp1ff/elmpd][elmpd]] is availab
 I'm now making GitHub releases that include Autotools source distributions:
 
 #+BEGIN_SRC bash
-curl -L --output elmpd-0.2.0.tar.gz  https://github.com/sp1ff/scribbu/archive/v0.5.tar.gz
-tar xf elmpd-0.2.0.tar.gz && cd elmpd-0.2.0
+curl -L --output elmpd-0.2.1.tar.gz  https://github.com/sp1ff/scribbu/archive/v0.5.tar.gz
+tar xf elmpd-0.2.1.tar.gz && cd elmpd-0.2.1
 ./configure && make all check
 sudo make install
 #+END_SRC

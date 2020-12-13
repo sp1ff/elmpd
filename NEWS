@@ -1,5 +1,10 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.2.1 build
+
+** Bug fixes
+
+*** 'elmpd-send' was sending "noidle" in the old way
 * 0.2.0 build
 
 ** User-visible changes

@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.2.0
+;; Version: 0.2.1
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.2.0")
+(defconst elmpd-version "0.2.1")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -771,7 +771,12 @@ as soon as possible."
          (fd
           (if (and local (file-exists-p local))
               (make-network-process :name name :remote local :nowait t)
-            (make-network-process :name name :host host :service port :nowait t)))
+            ;; (make-network-process :name name :host host :service port :nowait t)
+            (make-network-process
+             :name name
+             :host host
+             :service port
+             :nowait t)))
          (dtor
           (make-finalizer
            (lambda ()
@@ -816,7 +821,7 @@ as soon as possible."
               (elmpd--log 'debug "Cancelling idle mode.")
               (setf
                (elmpd-connection--q conn)
-               (append (list (cons "noidle" nil)) (elmpd-connection--q conn)))
+               (cons (elmpd--new-command "noidle") (elmpd-connection--q conn)))
               (elmpd--kick-queue conn))
           ;; We have a fully constructed, "regular" connection-- that
           ;; means that either:
