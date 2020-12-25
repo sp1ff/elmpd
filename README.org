@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2020-12-13 Sun 13:24>
+#+DATE: <2020-12-25 Fri 10:51>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -8,10 +8,12 @@
 
 [[https://melpa.org/#/elmpd][file:https://melpa.org/packages/elmpd-badge.svg]]
 [[https://stable.melpa.org/#/elmpd][file:https://stable.melpa.org/packages/elmpd-badge.svg]]
+[[https://github.com/sp1ff/elmpd/workflows/melpazoid/badge.svg][file:https://github.com/sp1ff/elmpd/workflows/melpazoid/badge.svg]]
 
 * Introduction
 
 [[https://github.com/sp1ff/elmpd][elmpd]] is a tight, asynchronous, ergonomic [[https://www.musicpd.org/][MPD]] client library in Emacs Lisp.
+
 * Prerequisites
 
 Emacs 25.1.
@@ -23,13 +25,13 @@ The simplest way to install [[https://github.com/sp1ff/elmpd][elmpd]] is availab
 I'm now making GitHub releases that include Autotools source distributions:
 
 #+BEGIN_SRC bash
-curl -L --output elmpd-0.2.1.tar.gz  https://github.com/sp1ff/scribbu/archive/v0.5.tar.gz
-tar xf elmpd-0.2.1.tar.gz && cd elmpd-0.2.1
+curl -L --output elmpd-0.2.2.tar.gz  https://github.com/sp1ff/scribbu/archive/v0.5.tar.gz
+tar xf elmpd-0.2.2.tar.gz && cd elmpd-0.2.2
 ./configure && make all check
 sudo make install
 #+END_SRC
 
-You can build from source:
+And of course, you can just build from source:
 
 #+BEGIN_SRC bash
 git clone git@github.com:sp1ff/elmpd.git
@@ -41,6 +43,11 @@ sudo make install
 
 * Getting Started
 
+** Creating Connections
+   :PROPERTIES:
+   :CUSTOM_ID: creating_connections
+   :END:
+
 Create an MPD connection by calling =elmpd-connect=; this will return an =elmpd-connection= instance immediately. Asynchronously, it will be parsing the MPD greeting message, perhaps sending an initial password, and if so requested, sending the "idle" command.
 
 There are two idioms I've seen in MPD client libraries for sending commands while receiving notifications of server-side changes:
@@ -49,9 +56,132 @@ There are two idioms I've seen in MPD client libraries for sending commands whil
 
     2. use one connection, issue the "idle" command, and when asked to issue another command, send "noidle", issue the requested command, collect the response, and then send "idle" again (e.g. [[https://gitea.petton.fr/mpdel/libmpdel][libmpdel]]).  Note that this is not a race condition per the MPD [[https://www.musicpd.org/doc/html/protocol.html#idle][docs]] -- any server-side changes that took place while processing the command will be saved & returned on "idle"
 
-Since =elmpd= is a library, I do not make that choice here, but rather support both styles.
+Since =elmpd= is a library, I do not make that choice here, but rather support both styles. See the docstring for =elmpd-connect= on how to configure your new connection in either way.
 
-The implementation is callback-based; each connection comes at the cost of a single socket plus whatever memory is needed to do the text processing in handling responses.  In particular, I declined to use =tq= despite the natural fit because I didn't want to use a buffer for each connection, as well.
+The implementation is callback-based; each connection comes at the cost of a single socket plus whatever memory is needed to do the text processing in handling responses. In particular, I declined to use =tq= despite the natural fit because I didn't want to use a buffer for each connection, as well.
+
+** Invoking Commands
+
+Send commands via =elmpd-send=. For example, to start MPD playing:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost")))
+    (elmpd-send conn "play"))
+#+END_SRC
+
+Sends the "play" command to your MPD server listening on port 6600 on localhost. Note that this code will likely return *before* anything actually happens. As mentioned [[#creating_connections][above]], =elmpd-connect= returns immediately after creating the network process; it only reads & parses the MPD greeting asynchronously. Likewise, =elmpd-send= only queues up the "play" command; it will actually be sent & its response read in the background.
+
+If you'd like to do something with the response, you can provide a callback:
+
+#+BEGIN_SRC elisp
+    (let ((conn (elmpd-connect :host "localhost")))
+      (elmpd-send 
+       conn
+       "getvol"
+       (lambda (_conn ok rsp)
+         (if ok
+             (message "volume is %s" (substring rsp 7))
+           (error "Failed to get volume: %s" rsp)))))
+#+END_SRC
+
+You can send command lists by specifying a list rather than a string as the second parameter:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost")))
+    (elmpd-send 
+     conn
+     '("random 1" "consume 1" "crossfade 5" "play")))
+#+END_SRC
+
+Will send the following to your local MPD daemon:
+
+#+BEGIN_EXAMPLE
+command_list_begin
+random 1
+consume 1
+crossfade 5
+play
+command_list_end
+#+END_EXAMPLE
+
+Now that we're sending multiple commands, we may be interested in processing the responses in different ways. For instance:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost"))
+        (groups '("Pogues" "Rolling Stones" "Flogging Molly")))
+      (elmpd-send 
+       conn
+       (cl-mapc (lambda (x) (format "count \"(Artist =~ '%s')\"" x)) groups)
+       (lambda (_conn ok rsp)
+         (if ok
+             ;; `rsp' is a list; one response per command
+             (cl-mapc
+              (lambda (x)
+                (let* ((lines (split x "\n" t))
+                       (line (car lines)))
+                  (message (substring line 7)))))
+           (error "Error counting: %s" rsp)))
+       'list))
+#+END_SRC
+
+will issue the "count" command in a command list (once for each of "Pogues", "Rolling Stones" & "Flogging Molly"), receive the responses as a list, and process the list. If you just can't wait, you can specify ='stream= instead of ='list=; in this case as soon as a response from a sub-command is available, your callback will be invoked with it:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost"))
+        (groups '("Pogues" "Rolling Stones" "Flogging Molly")))
+      (elmpd-send 
+       conn
+       (cl-mapc (lambda (x) (format "count \"(Artist =~ '%s')\"" x)) groups)
+       (lambda (_conn ok rsp)
+         (if ok
+             ;; `rsp' is a string; one invocation per command
+             (let* ((lines (split x "\n" t))
+                    (line (car lines)))
+               (message (substring line 7)))
+           (error "Error counting: %s" rsp)))
+       'stream))
+#+END_SRC
+
+Prior to 0.2.2, sending a subsequent response meant you had to invoke =elmpd-send= from your callback, like so:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost")))
+    (elmpd-send 
+     conn
+     "getvol"
+     (lambda (_conn ok rsp)
+       (if ok
+           (let ((vol (string-to-number (substring rsp 7 -1))))
+             (if (< vol 50)
+                 (elmpd-send
+                  conn
+                  "setvol 50"
+                  (lambda (_conn ok rsp)
+                    (if ok
+                        (message "Increased volume from %d to 50." vol)
+                      (message "Failed to increase volume: %s" rsp))))))
+         (error "Failed to get volume: %s" rsp)))))
+#+END_SRC
+
+As with Javascript futures, this quickly became inconvenient & difficult to read, so I introduced the =elmpd-chain= macro in the hopes of achieving a syntax more like async Rust:
+
+#+BEGIN_SRC elisp
+  (let ((conn (elmpd-connect :host "localhost"))
+        (vol 0))
+    (elmpd-chain
+     conn
+     ("getvol"
+      (lambda (_conn rsp)
+        (setq vol (string-to-number (substring rsp 7 -1)))))
+     :or-else
+     (lambda (_conn rsp) (error "Failed to get volume: %s" rsp))
+     :and-then
+     ((format "setvol %d" (max 50 vol))
+      (lambda (_ _) (message "Set volume to %d." vol)))
+     :or-else
+     (message "Failed to increase volume: %s" rsp)))
+#+END_SRC
+
 * Motivation & Design Philosphy
 
 [[https://github.com/DamienCassou][Damien Cassou]], the author of [[https://github.com/mpdel/mpdel][mpdel]] and [[https://gitea.petton.fr/mpdel/libmpdel][libmpdel]], [[https://github.com/sp1ff/elmpd/issues/1][reached out]] to ask "Why elmpd?" His question prompted me to clarify my thoughts around this project & I've adapted my response here.
@@ -69,30 +199,4 @@ I've been using the library for some time with good results. The bulk of the wor
     (elmpd-send conn "play"))
 #+END_SRC
 
-I've written a separate package, [[https://github.com/mpdmacs][mpdmacs]], that hopefully does so in a generic way. I've recently, finally, gotten my head around LISP macros (short story: the code _really is_ just data!) and so my next project for this package is to introduce some kind of syntax that eases chaining commands. IOW instead of writing something like this:
-
-#+BEGIN_SRC elisp
-  (let ((conn (elmpd-connect)))
-    (elmpd-send
-     conn
-     "foo"
-     (lambda (conn text)
-       (if (everything-is-ok-with text)
-           (elmpd-send
-            conn
-            "bar"
-            (lambda (conn text)
-              (if (everything-is-ok-with text)
-                  (elmpd-send
-                   conn
-                   "dear Lord I can't indent much more..."))))))))
-#+END_SRC
-
-maybe something like this:
-
-#+BEGIN_SRC elisp
-  (let ((con (elmpd-connect)))
-    (elmpd-do "foo")
-    (and-then "bar")
-    (and-then "..."))
-#+END_SRC
+I've written a separate package, [[https://github.com/mpdmacs][mpdmacs]], that hopefully does so in a generic way. I've recently, finally, gotten my head around LISP macros (short story: the code _really is_ just data!) and so I've just implemented =elmpd-chain=; my next project for this package is to re-implement my other packages built on top of this in terms of =elmpd-chain= & refine it.

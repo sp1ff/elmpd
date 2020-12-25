@@ -1,5 +1,12 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
+* 0.2.2 build
+
+** User-visible changes
+
+*** Added 'elmpd-chain'
+
+You can now chain commands with more convenient syntax.
 * 0.2.1 build
 
 ** Bug fixes

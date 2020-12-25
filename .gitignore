@@ -7,3 +7,6 @@ autom4te.cache
 build-aux
 configure
 env.sh
+*.bz2
+*.gz
+*.xz

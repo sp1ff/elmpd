@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.2.1
+;; Version: 0.2.2
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.2.1")
+(defconst elmpd-version "0.2.2")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -566,13 +566,18 @@ Return nil if not found, else return a list of length five:
           (cond
            ((and cb-style (not (eq cb-style 'default)))
             (let ((sub-rsp (elmpd--parse-sub-responses buf))) ;; (list . remainder)
-              ;; NB `(cdr sub-rsp)' should be empty/nil
+              ;; NB `(cdr sub-rsp)' should be empty/nil or "OK\n"
+	      (elmpd--log 'debug "sub-rsp is ``%s'' & style is ``%s''." sub-rsp cb-style)
+	      (if (and (cdr sub-rsp)
+		       (not (string= (cdr sub-rsp) "OK\n"))
+		       (not (string-prefix-p "ACK" (cdr sub-rsp))))
+		  (error "Internal error: failed to parse response: ``%s''" sub-rsp))
               (if (eq cb-style 'list)
-                  (progn
-                    (funcall q-cb conn t (append
-                                          (elmpd-connection--rsp-list conn)
-                                          (car sub-rsp)))
+                  (let ((final-arg (append (elmpd-connection--rsp-list conn) (car sub-rsp))))
+		    (elmpd--log 'debug "Final arg to 'list cb: %s" final-arg)
+                    (funcall q-cb conn t final-arg)
                     (setf (elmpd-connection--rsp-list conn) nil))
+		(elmpd--log 'debug "Invoking as stream.")
                 (cl-mapc
                  (lambda (rsp)
                    (funcall q-cb conn t rsp))
@@ -793,7 +798,54 @@ as soon as possible."
     conn))
 
 (defun elmpd-send (conn cmd &optional cb &rest args)
-  "Send command CMD with callback CB on connection CONN."
+  "Send command CMD with callback CB on connection CONN.
+
+CMD may be either a string representing a single command, or a
+list of strings representing a command list.  The optional
+argument CB is a callback which will be invoked in response to
+the command in a manner determined by the keyword argument
+:response:
+
+    - 'default: if unspecified, or if CMD is a string, the
+      callback style is 'default; the callback will be invoked
+      with three parameters, the connection, a boolean indicating
+      success or failure of the command and either the server
+      response (on success) or error message (on failure).  If
+      CMD is a list, it will be invoked via
+      \"command_list_begin\".
+
+    - 'list: this style is only applicable to command lists; the
+      callback will be invoked wit three parameters: the
+      connection, a boolean, and a list of responses to each
+      individual command in the list.  The command list will be
+      invoked via \"command_list_ok_begin\".
+
+    - 'stream: this style is only applicable to command lists;
+      the callback will be invoked repeatedly, once for each
+      completed sub-command.  It will be invoked with three
+      parameters: the connection, a boolean indicating success or
+      failure, and the sub-command response (on success) or the
+      sub-command error message (on failure).  The command list
+      will be invoked via \"command_list_ok_begin\".
+
+For example, sending a command list of (\"ping\", \"ping\",
+\"ping\") with each of the three styles would result in:
+
+    - 'default: a single invocation of the callback with
+      parameters `conn', 't', and \"pong\npong\npong\n\"
+
+    - 'list: a single invocation of the callback with parameters
+      `conn', 't', and '(\"pong\", \"pong\", \"pong\")
+
+    - 'stream: three invocations of the callback, each with
+      parameters `conn', 't', and \"pong\"; the timing of each
+      callback depends on receipt of the response at the client,
+      each invocation will be made as soon as the corresponding
+      response is available.
+
+If you need to send multiple commands where subsequent commands
+depend on the responses to prior commands, consider
+`elmpd-chain'."
 
   (let* ((q (elmpd-connection--q conn))
          (cb-style (plist-get args :response))
@@ -837,6 +889,114 @@ as soon as possible."
 (defun elmpd-conn-queue-size (conn)
   "Return the present length of CONN's queue."
   (length (elmpd-connection--q conn)))
+
+(defmacro elmpd-chain (conn &rest chain)
+  "Chain multiple MPD commands on CONN conveniently.  See below for CHAIN.
+
+Sending multiple, un-connected commands to MPD is simple: use a
+command list:
+
+    (elmpd-send conn '(\"foo\" \"bar\" \"splat\")...)
+
+But what if you need to send a command, process the response, and
+send another command whose contents depends upon the response to
+the first? Then you're reduced to writing things like:
+
+    (elmpd-send
+      conn
+      \"whatever\"
+      (lambda (conn ok rsp)
+        (if ok
+            ;; do some stuff with `rsp'
+            (elmpd-send
+              conn
+              \"something new\")
+          (message \"Oops!\"))))
+
+`elmpd-chain' is a macro that automates the generation of such nested code.
+
+Call it like so:
+
+    (elmpd-chain
+      conn
+      CMD
+      [:or-else ELSE-HANDLER]
+      [:and-then
+        [CMD OR-ELSE? AND-THEN...])
+
+CMD may be any of:
+
+    1. a single value `cmd'
+    2. a list with two elements (`cmd' `cb')
+    3. a list with three elements (`cmd' `cb' `style')
+
+In any case, `cmd' may be either a string or a list of strings.
+In case 3, if `cmd' is a string, then `style' must be 'default.
+Note that the callback will be invoked with just two
+arguments (the connection and the response), since it will only
+be invoked on success (you can place failure logic in an :or-else
+clause).  Similarly, :or-else handlers are also invoked with
+just two arguments, since it will only be invoked on failure."
+
+  ;; Let us destructure `chain' into (`cmd' `chain').
+  (if chain
+      (let* ((cmd (car chain))
+	     (chain (cdr chain))
+	     ;; Now, `cmd' may be:
+	     ;; 1. a single value `arg'         => send arg, no cb
+	     ;; 2. a list (`arg' `cb')          => send arg with cb & style 'default
+	     ;; 3. a list (`arg' `cb' `style')  => send arg with cb & style `style'
+	     ;; In any case, `arg' may be either a string or a list of
+	     ;; strings.
+	     ;; In case 3., if `arg' is a string, then `style' *must* be 'default.
+	     (arg (if (listp cmd) (nth 0 cmd) cmd))
+	     (cb (if (listp cmd) (nth 1 cmd)))
+	     (style (if (and (listp cmd) (> (length cmd) 2)) (nth 2 cmd) 'default))
+	     ;; We next need to know if there's an `:or-else' clause next
+	     ;; on `chain'; pull it off if there is
+	     (or-else
+	      (if (and chain
+		       (symbolp (car chain))
+		       (eq ':or-else (car chain))
+		       (> (length chain) 1))
+		  (prog1
+		      (nth 1 chain)
+		    (setq chain (last chain (- (length chain) 2))))))
+	     ;; And finally-- is there an `:and-then' clause coming?
+	     (and-then
+	      (if (and chain
+		       (symbolp (car chain))
+		       (eq ':and-then (car chain))
+		       (> (length chain) 1))
+		  (prog1
+		      t
+		    (setq chain (cdr chain))))))
+	      ;; Wheh! We now have everything we need for this level in this let
+	      ;; form's variables, and the recursion is setup in `chain'.
+        (if (and (eq style 'stream) chain)
+            (error "'stream may only be used as the last step in the chain"))
+        (let ((out
+	             (list
+		            'elmpd-send
+		            conn
+                arg
+                ;; This is where we both construct the callback for
+                ;; the preceeding `elmpd-send' invocation *and*
+                ;; recurse.
+		            (if (or cb or-else and-then)
+		                (list 'lambda (list 'conn 'ok 'text)
+			                    `(if ok
+			                         (progn
+				                         ,(if cb (list 'funcall cb 'conn 'text))
+				                         (elmpd-chain conn ,@chain))
+			                       ,(if or-else `(funcall ,or-else conn text))))))))
+          ;; At this point `out' is the form that when interpreted as
+          ;; code will invoke `elmpd-send'.  Append the keyword
+          ;; argument, but only in case there's actually a callback
+          ;; (it would do no harm either way, without a callback the
+          ;; :response argument would just be ignored, I just think
+          ;; it's little neater this way)
+          (if cb (append out (list :response (list 'quote style))) out)))))
 
 (provide 'elmpd)
 

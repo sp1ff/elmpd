@@ -14,3 +14,13 @@
  (lambda (_ ok text)
    (elmpd-log 'info 'smoke-tests "streaming response: %s %s" ok text))
  :response 'stream)
+
+(elmpd-chain
+ conn
+ "pause"
+ :and-then
+ "status"
+ :and-then
+ ("pause"
+  (lambda (_conn text)
+    (elmpd-log 'info 'smoke-tests "pause toggled twice: %s" text))))

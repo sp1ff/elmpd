@@ -84,7 +84,6 @@
 ;; the response, it will check to see if there are any left. If not,
 ;; it deletes itself.
 
-;; TODO(sp1ff): this function is too long & too hard to read-- re-factor
 (defun elmpd-mock-mpd-server-filter (proc text)
   "Mock MPD process filter: PROC is the server process, TEXT the input."
   (let* ((plist (process-plist proc))
@@ -92,7 +91,7 @@
          (idle-state (plist-get plist :idle-state))
          (in (caar msgs))
          (out (cdar msgs)))
-    (elmpd-log 'info 'mock-server "mock-server: %s|%s|%s|%s" text in out idle-state)
+    (elmpd-log 'debug 'mock-server "mock-server: %s|%s|%s|%s" text in out idle-state)
     (if (and (symbolp in) (eq in 'idle))
         ;; We're expecting an "idle" message.
         (if idle-state
@@ -104,7 +103,10 @@
               (plist-put plist :idle-state nil)
               (plist-put plist :msgs (cdr msgs))
               (set-process-plist proc plist)
-              (if (eq 1 (length msgs) (delete-process proc))))
+              (if (eq 1 (length msgs)
+		                  (progn
+			                  (elfeed-log 'warn 'mock-server "All server-side messages sent; deleting process.")
+			                  (delete-process proc)))))
           ;; We're expecting an "idle" message (to which we produce no
           ;; response), and the subsequent "noidle" message may or not
           ;; be waiting for us in `text' as well.
@@ -122,7 +124,10 @@
                   ;; Done
                   (plist-put plist :idle-state nil)
                   (plist-put plist :msgs (cdr msgs))
-                  (if (eq 1 (length msgs)) (delete-process proc)))
+                  (if (eq 1 (length msgs))
+		                  (progn
+			                  (elfeed-log 'warn 'mock-server "All server-side messages sent; deleting process.")
+			                  (delete-process proc))))
               ;; The "noidle" didn't show up in this
               ;; message-- record the fact that we're
               ;; expecting it next.
@@ -141,24 +146,44 @@
               (plist-put plist :msgs (cdr msgs))
               (plist-put plist :buf "")
               (set-process-plist proc plist)
+	            (elmpd-log 'info 'mock-server "Sending ``%s''." out)
               (process-send-string proc out)
-              (if (eq 1 (length msgs)) (delete-process proc)))
+              (if (eq 1 (length msgs))
+		              (progn
+		                (elmpd-log 'warn 'mock-server "That was the last message-- deleting the network process.")
+		                (delete-process proc))))
           (plist-put plist :buf curr)
           (set-process-plist proc plist)
           (elmpd-log 'debug 'elmpd-mock-server
                      "partial response: process plist now has %d msgs"
                      (length (plist-get (process-plist proc) :msgs))))))))
 
-;; TODO(sp1ff): IN-PROGRESS: finally formalizing my mock MPD server
-;; idiom; once I get this working I'd like to hoist it out into a
-;; library, somewhere-- but how to re-use it in `mpdmacs' et al?
 (defmacro with-elmpd-test (name convo idle-spec &rest body)
   "Run BODY against a mocked MPD server expecting CONVO from test NAME.
 
 The body can test against a mocked MPD connection named `conn',
 which will be automatically cleaned-up on exit (clean or not).
 
-TODO(sp1ff): document CONVO."
+CONVO is a list of request/response pairs describing the
+conversation expected to take place.  In general, each list item
+will be a cons cell whose car is the exact text the client is
+expected to send & whose cdr is the exact text with which the
+server should respond.  Note that this should be the text as
+exressed on the wire: e.g. (\"ping\n\" . \"OK\n\").
+
+When the client is expected to send the \"idle\" command, receive
+no response, then send the \"noidle\" command, this can be
+expressed as (idle \"system1\" \"system2\" ...).  If the caller
+wants to simulate the \"idle\" message getting a response, that
+can be expressed as per usual, e.g:
+
+    (\"idle\n\" . \"changes: player\nOK\n\")
+
+IDLE-SPEC gives the idle specification with which the connection
+shall be created.  If 'nil' is given, the connection will not
+\(of its own volition) issue the idle command.  If given, it
+should be in the form accepted by `elmpd-connect'."
+
   (declare (indent defun))
   `(let* ((elmpd-log-level 'debug)
           (elmpd-log-buffer-name (concat "*" ,name "*"))
@@ -186,11 +211,12 @@ TODO(sp1ff): document CONVO."
             :subsystems ,idle-spec)))
      (unwind-protect
          (progn ,@body)
+       (elmpd-log 'info 'mock-server "Body forms complete-- making sure the queue is drained.")
        (accept-process-output (elmpd-connection--fd conn) 0)
        (let ((count 0))
          (while (not finished)
-           ;; I can't find an documentation on this, but calling `sit-for'
-           ;; seems essential to processing  the input.
+           ;; I can't find any documentation on this, but calling
+           ;; `sit-for' seems essential to processing the input.
            (sit-for 2)
            (accept-process-output (elmpd-connection--fd conn) 0)
            (setq count (1+ count))
@@ -199,7 +225,8 @@ TODO(sp1ff): document CONVO."
            (should (< count 8))))
        (should (eq 0 (elmpd-conn-queue-size conn)))
        (delete-process server)
-       (should (not (process-live-p server))))))
+       (should (not (process-live-p server)))
+       (elmpd-log 'warn 'mock-server "Exiting `with-elmpd-test'."))))
 
 (provide 'with-elmpd-test)
 
