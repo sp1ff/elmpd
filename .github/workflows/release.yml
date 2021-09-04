@@ -1,0 +1,162 @@
+# Setting up a release workflow for `elmpd'. Much thanks to
+# BurntShushi from whom I shamelessly copied a lot of this
+# <https://github.com/BurntSushi/ripgrep/blob/master/.github/workflows/release.yml>
+name: release
+on:
+  # allow this workflow to be triggered manually, which is what this
+  # event allegedly does
+  workflow_dispatch:
+  # Modifying the push event with 'branches' and 'tags' seems to be an OR operation (i.e. the workflow
+  # will run if either on branch release-infra *or* it has a tag of n.n.n)
+  push:
+    # Un-comment this for testing
+    # branches:
+    #   - release-infra
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  # This job will create the GitHub release
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    # Un-comment this for testing
+    # env:
+    #   RELEASE_VERSION: 0.8.5
+    steps:
+      - name: Create artifacts directory
+        run: mkdir artifacts
+
+      - name: Get the release version from the tag
+        if: env.RELEASE_VERSION == ''
+        run: |
+          # https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "RELEASE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.RELEASE_VERSION }}"
+      - name: Create GitHub release
+        id: release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          release_name: ${{ env.RELEASE_VERSION }}
+
+      - name: Save release upload URL to artifact
+        run: echo "${{ steps.release.outputs.upload_url }}" > artifacts/release-upload-url
+
+      - name: Save version number to artifact
+        run: echo "${{ env.RELEASE_VERSION }}" > artifacts/release-version
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: artifacts
+          path: artifacts
+
+  # This job will actually create the artifacts I want to include with the release
+  build-release:
+    name: build-release
+    needs: ['create-release']
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v2
+
+    - name: Get release download URL
+      uses: actions/download-artifact@v1
+      with:
+        name: artifacts
+        path: artifacts
+
+    - name: Set release upload URL and release version
+      shell: bash
+      run: |
+        release_upload_url="$(cat artifacts/release-upload-url)"
+        echo "RELEASE_UPLOAD_URL=$release_upload_url" >> $GITHUB_ENV
+        echo "release upload url: $RELEASE_UPLOAD_URL"
+        release_version="$(cat artifacts/release-version)"
+        echo "RELEASE_VERSION=$release_version" >> $GITHUB_ENV
+        echo "release version: $RELEASE_VERSION"
+
+    - name: Install tooling
+      shell: bash
+      run: |
+          pwd
+          set -x
+          sudo apt-get install -y autoconf automake emacs
+          git clone https://github.com/skeeto/elfeed.git
+
+    - name: Install a modern version of automake
+      shell: bash
+      run: |
+          set -x
+          cd /tmp
+          curl -L -O https://ftp.gnu.org/gnu/automake/automake-1.16.4.tar.xz
+          tar -xf automake-1.16.4.tar.xz
+          cd automake-1.16.4
+          ./configure && make
+          sudo make install
+
+    - name: Configure & roll an elfeed-score distribution tarball
+      shell: bash
+      run: |
+        pwd
+        set -x
+        ./bootstrap && ./configure
+        make all check dist
+        echo "DISTRO_BZ2=elmpd-${{ env.RELEASE_VERSION }}.tar.bz2" >> $GITHUB_ENV
+        echo "DISTRO_GZ=elmpd-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_ENV
+        echo "DISTRO_XZ=elmpd-${{ env.RELEASE_VERSION }}.tar.xz" >> $GITHUB_ENV
+        echo "DISTRO_ZSTD=elmpd-${{ env.RELEASE_VERSION }}.tar.zst" >> $GITHUB_ENV
+        echo "DISTRO_PKG=elmpd-${{ env.RELEASE_VERSION }}.tar" >> $GITHUB_ENV
+
+    - name: Upload bzip2 tarball
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_BZ2 }}
+        asset_name: ${{ env.DISTRO_BZ2 }}
+        asset_content_type: application/octet-stream
+
+    - name: Upload gzip tarball
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_GZ }}
+        asset_name: ${{ env.DISTRO_GZ }}
+        asset_content_type: application/octet-stream
+
+    - name: Upload xzip tarball
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_XZ }}
+        asset_name: ${{ env.DISTRO_XZ }}
+        asset_content_type: application/octet-stream
+
+    - name: Upload zstd tarball
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_ZSTD }}
+        asset_name: ${{ env.DISTRO_ZSTD }}
+        asset_content_type: application/octet-stream
+
+    - name: Upload the Emacs package
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_PKG }}
+        asset_name: ${{ env.DISTRO_PKG }}
+        asset_content_type: application/octet-stream
