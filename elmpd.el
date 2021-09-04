@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.2.2
+;; Version: 0.2.3
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.2.2")
+(defconst elmpd-version "0.2.3")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -116,46 +116,10 @@
      (t (substring s 0 n)))))
 
 (defvar elmpd--log-idle-cb-len 24
-  "Max length of the idle callback while pretty-printing `elmpd-connection' instances.")
+  "Max length of the idle callback while pretty-printing connection instances.")
 
 (defvar elmpd--log-queue-cb-len 18
-  "Max length of queue command callbacks while pretty-printing `elmpd-connection' instances.")
-
-(defun elmpd--pp-cmd (cmd)
-  "Pretty-print CMD to string."
-  (format
-   "(%s%s)"
-   (if (elmpd-command--simple-command cmd)
-       (elmpd-command--simple-command cmd)
-     (elmpd-command--compound-command cmd))
-   (let ((cb (elmpd-command--callback cmd)))
-	   (if cb
-	       (format
-          " => %s [%s]"
-          (elmpd--pp-truncate-string
-           (prin1-to-string
-            (if (byte-code-function-p cb) ; byte-compiled code looks ugly
-                (aref cb 2)               ; when printed
-              cb))
-           elmpd--log-queue-cb-len)
-          (elmpd-command--callback-style cmd))
-	     ""))))
-
-(defun elmpd--pp-conn (conn)
-  "Pretty-print CONN to string."
-  (format
-   "#elmpd{%s %s %s}"
-   (process-name (elmpd-connection--fd conn))
-   (format
-    "(%s . %s)"
-    (prin1-to-string (car (elmpd-connection--idle conn)))
-    (elmpd--pp-truncate-string
-     (prin1-to-string (cdr (elmpd-connection--idle conn)))
-   elmpd--log-idle-cb-len))
-   (mapconcat
-    #'elmpd--pp-cmd
-    (elmpd-connection--q conn)
-    " ")))
+  "Max length of queue command callbacks while pretty-printing connection instances.")
 
 (defun elmpd-log (level facility fmt &rest objects)
   "Log message FMT from FACILITY at level LEVEL.
@@ -300,6 +264,26 @@ use the same logging facility.  This package logs with FACILITY
   callback         ; optional callback-- signature depends on the style
   callback-style)  ; 'default, 'list or 'stream
 
+(defun elmpd--pp-cmd (cmd)
+  "Pretty-print CMD to string."
+  (format
+   "(%s%s)"
+   (if (elmpd-command--simple-command cmd)
+       (elmpd-command--simple-command cmd)
+     (elmpd-command--compound-command cmd))
+   (let ((cb (elmpd-command--callback cmd)))
+	   (if cb
+	       (format
+          " => %s [%s]"
+          (elmpd--pp-truncate-string
+           (prin1-to-string
+            (if (byte-code-function-p cb) ; byte-compiled code looks ugly
+                (aref cb 2)               ; when printed
+              cb))
+           elmpd--log-queue-cb-len)
+          (elmpd-command--callback-style cmd))
+	     ""))))
+
 (defun elmpd--new-command (command &rest args)
   "Construct an `elmpd-command' instance with COMMAND & ARGS.
 
@@ -351,6 +335,22 @@ an optional callback.  The (optional) third is the callback style; one of
   idle      ;; idle configuration-- cf. `elmpd-connect' for format
   q         ;; command queue: this is a list of elmpd-command
   rsp-list) ;; accumulated command_ok_list sub-responses
+
+(defun elmpd--pp-conn (conn)
+  "Pretty-print CONN to string."
+  (format
+   "#elmpd{%s %s %s}"
+   (process-name (elmpd-connection--fd conn))
+   (format
+    "(%s . %s)"
+    (prin1-to-string (car (elmpd-connection--idle conn)))
+    (elmpd--pp-truncate-string
+     (prin1-to-string (cdr (elmpd-connection--idle conn)))
+   elmpd--log-idle-cb-len))
+   (mapconcat
+    #'elmpd--pp-cmd
+    (elmpd-connection--q conn)
+    " ")))
 
 (defun elmpd--process-sentinel (process event)
   "Callback invoked when PROCESS experiences EVENT."
@@ -468,6 +468,10 @@ Return nil if not found, else return a list of length five:
 	            j (cl-search "list_OK\n" buf :start2 i)))
     (cons (reverse lines) (substring buf i))))
 
+(defun elmpd--truncate-text (text)
+  "Truncate TEXT."
+  (truncate-string-to-width text 512 nil nil t))
+
 (defun elmpd-connection--filter (conn output)
   "General process filter; CONN has received output OUTPUT."
 
@@ -555,7 +559,7 @@ Return nil if not found, else return a list of length five:
     (if (or err ok)
         (progn
           (elmpd--log 'debug "%s processing a response of \"%s\"."
-                      (elmpd--pp-conn conn) buf)
+                      (elmpd--pp-conn conn) (elmpd--truncate-text buf))
           ;; Clear out the connection's buffer,
           (setf (elmpd-connection--inbuf conn) "")
           ;; pop the queue,
@@ -586,7 +590,8 @@ Return nil if not found, else return a list of length five:
            ((and cb-style (eq cb-style 'default))
             (if ok
                 (let ((rsp (substring buf 0 -3)))
-                  (funcall q-cb conn t rsp))
+                  (funcall q-cb conn t rsp)
+                  (elmpd--log 'debug "cb done."))
               (funcall q-cb conn nil (nth 3 err))))
            ((and ok (not q))
             (funcall
@@ -815,7 +820,7 @@ the command in a manner determined by the keyword argument
       \"command_list_begin\".
 
     - 'list: this style is only applicable to command lists; the
-      callback will be invoked wit three parameters: the
+      callback will be invoked with three parameters: the
       connection, a boolean, and a list of responses to each
       individual command in the list.  The command list will be
       invoked via \"command_list_ok_begin\".
@@ -941,36 +946,36 @@ just two arguments, since it will only be invoked on failure."
   ;; Let us destructure `chain' into (`cmd' `chain').
   (if chain
       (let* ((cmd (car chain))
-	     (chain (cdr chain))
-	     ;; Now, `cmd' may be:
-	     ;; 1. a single value `arg'         => send arg, no cb
-	     ;; 2. a list (`arg' `cb')          => send arg with cb & style 'default
-	     ;; 3. a list (`arg' `cb' `style')  => send arg with cb & style `style'
-	     ;; In any case, `arg' may be either a string or a list of
-	     ;; strings.
-	     ;; In case 3., if `arg' is a string, then `style' *must* be 'default.
-	     (arg (if (listp cmd) (nth 0 cmd) cmd))
-	     (cb (if (listp cmd) (nth 1 cmd)))
-	     (style (if (and (listp cmd) (> (length cmd) 2)) (nth 2 cmd) 'default))
-	     ;; We next need to know if there's an `:or-else' clause next
-	     ;; on `chain'; pull it off if there is
-	     (or-else
-	      (if (and chain
-		       (symbolp (car chain))
-		       (eq ':or-else (car chain))
-		       (> (length chain) 1))
-		  (prog1
-		      (nth 1 chain)
-		    (setq chain (last chain (- (length chain) 2))))))
-	     ;; And finally-- is there an `:and-then' clause coming?
-	     (and-then
-	      (if (and chain
-		       (symbolp (car chain))
-		       (eq ':and-then (car chain))
-		       (> (length chain) 1))
-		  (prog1
-		      t
-		    (setq chain (cdr chain))))))
+	           (chain (cdr chain))
+	           ;; Now, `cmd' may be:
+	           ;; 1. a single value `arg'         => send arg, no cb
+	           ;; 2. a list (`arg' `cb')          => send arg with cb & style 'default
+	           ;; 3. a list (`arg' `cb' `style')  => send arg with cb & style `style'
+	           ;; In any case, `arg' may be either a string or a list of
+	           ;; strings.
+	           ;; In case 3., if `arg' is a string, then `style' *must* be 'default.
+	           (arg (if (listp cmd) (nth 0 cmd) cmd))
+	           (cb (if (listp cmd) (nth 1 cmd)))
+	           (style (if (and (listp cmd) (> (length cmd) 2)) (nth 2 cmd) 'default))
+	           ;; We next need to know if there's an `:or-else' clause next
+	           ;; on `chain'; pull it off if there is
+	           (or-else
+	            (if (and chain
+		                   (symbolp (car chain))
+		                   (eq ':or-else (car chain))
+		                   (> (length chain) 1))
+		              (prog1
+		                  (nth 1 chain)
+		                (setq chain (last chain (- (length chain) 2))))))
+	           ;; And finally-- is there an `:and-then' clause coming?
+	           (and-then
+	            (if (and chain
+		                   (symbolp (car chain))
+		                   (eq ':and-then (car chain))
+		                   (> (length chain) 1))
+		              (prog1
+		                  t
+		                (setq chain (cdr chain))))))
 	      ;; Wheh! We now have everything we need for this level in this let
 	      ;; form's variables, and the recursion is setup in `chain'.
         (if (and (eq style 'stream) chain)

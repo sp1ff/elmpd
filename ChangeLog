@@ -1,3 +1,7 @@
+2021-09-03  Michael Herstine  <sp1ff@pobox.com>
+
+	Minor commit: indentation issues, moved a few defuns so they would be defined before use.
+
 2020-12-25  Michael Herstine  <sp1ff@pobox.com>
 
 	Added 'elmpd-chain'.
