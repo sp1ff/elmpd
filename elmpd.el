@@ -1,9 +1,9 @@
 ;;; elmpd.el --- A tight, ergonomic, async client library for mpd  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
+;; Copyright (C) 2020-2024 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 0.2.3
+;; Version: 0.2.4
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "0.2.3")
+(defconst elmpd-version "0.2.4")
 
 ;;; Logging-- useful for debugging asynchronous functions
 
@@ -75,7 +75,8 @@
   "Name of buffer used for logging `elmpd' events.")
 
 (defvar elmpd-log-level 'info
-  "Level at which `elmpd' shall log; may be one of 'debug, 'info, 'warn, or 'error.")
+  "Level at which `elmpd' shall log.
+May be one of \='debug, \='info, \='warn, or \='error.")
 
 (defvar elmpd-max-log-buffer-size 750
   "Maximum length (in lines) of the log buffer.  nil means unlimited.")
@@ -119,7 +120,7 @@
   "Max length of the idle callback while pretty-printing connection instances.")
 
 (defvar elmpd--log-queue-cb-len 18
-  "Max length of queue command callbacks while pretty-printing connection instances.")
+  "Max length of queue command callbacks while pretty-printing connections.")
 
 (defun elmpd-log (level facility fmt &rest objects)
   "Log message FMT from FACILITY at level LEVEL.
@@ -128,7 +129,7 @@ Log the message formed my FMT & replacement parameters OBJECTS
 to the elmpd log buffer at `elmpd-log-buffer-name'.  The FACILITY
 parameter is meant to enable code built on top of `elmpd' to
 use the same logging facility.  This package logs with FACILITY
-'elmpd."
+\='elmpd."
 
   (when (>= (elmpd--log-level-number level)
             (elmpd--log-level-number elmpd-log-level))
@@ -146,7 +147,7 @@ use the same logging facility.  This package logs with FACILITY
             (elmpd--truncate-log-buffer))))))
 
 (defun elmpd--log (level fmt &rest objects)
-  "Log message FMT a level LEVEL from facility 'elmpd."
+  "Log message FMT a level LEVEL from facility \='elmpd."
   (apply #'elmpd-log level 'elmpd fmt objects))
 
 (defun elmpd-clear-log ()
@@ -289,7 +290,7 @@ use the same logging facility.  This package logs with FACILITY
 
 COMMAND may be either a string or a list of strings.  The second argument is
 an optional callback.  The (optional) third is the callback style; one of
-'default, 'list or 'stream."
+\='default, \='list or \='stream."
   (let ((cb (nth 0 args))     ; may be nil
         (style (nth 1 args))) ; may be nil
     (cond
@@ -495,7 +496,7 @@ Return nil if not found, else return a list of length five:
   ;;
   ;; The algorithm:
   ;;
-  ;;   1. let `buf' be the un-parsed response so far, icnluding OUTPUT
+  ;;   1. let `buf' be the un-parsed response so far, including OUTPUT
   ;;      (i.e.  the remnants of previous response chunks if any with
   ;;      OUTPUT appended thereto)
   ;;
@@ -729,9 +730,9 @@ be any of the following:
                 the command.  When that command completes,
                 \"idle\" will be re-issued.  This argument shall
                 be a cons cell whose car is either the keyword
-                'all, the symbol representing the subsystem of
+                \='all, the symbol representing the subsystem of
                 interest, or a list of symbols naming the
-                subsystems of interest (e.g. '(player mixer
+                subsystems of interest (e.g. \='(player mixer
                 output) and whose cdr is a callback to be invoked
                 when any of those subsystems change; the callback
                 shall take two parameters the first of which will
@@ -781,7 +782,6 @@ as soon as possible."
          (fd
           (if (and local (file-exists-p local))
               (make-network-process :name name :remote local :nowait t)
-            ;; (make-network-process :name name :host host :service port :nowait t)
             (make-network-process
              :name name
              :host host
@@ -811,21 +811,21 @@ argument CB is a callback which will be invoked in response to
 the command in a manner determined by the keyword argument
 :response:
 
-    - 'default: if unspecified, or if CMD is a string, the
-      callback style is 'default; the callback will be invoked
+    - \='default: if unspecified, or if CMD is a string, the
+      callback style is \='default; the callback will be invoked
       with three parameters, the connection, a boolean indicating
       success or failure of the command and either the server
       response (on success) or error message (on failure).  If
       CMD is a list, it will be invoked via
       \"command_list_begin\".
 
-    - 'list: this style is only applicable to command lists; the
+    - \='list: this style is only applicable to command lists; the
       callback will be invoked with three parameters: the
       connection, a boolean, and a list of responses to each
       individual command in the list.  The command list will be
       invoked via \"command_list_ok_begin\".
 
-    - 'stream: this style is only applicable to command lists;
+    - \='stream: this style is only applicable to command lists;
       the callback will be invoked repeatedly, once for each
       completed sub-command.  It will be invoked with three
       parameters: the connection, a boolean indicating success or
@@ -836,14 +836,14 @@ the command in a manner determined by the keyword argument
 For example, sending a command list of (\"ping\", \"ping\",
 \"ping\") with each of the three styles would result in:
 
-    - 'default: a single invocation of the callback with
-      parameters `conn', 't', and \"pong\npong\npong\n\"
+    - \='default: a single invocation of the callback with
+      parameters `conn', \='t\=', and \"pong\npong\npong\n\"
 
-    - 'list: a single invocation of the callback with parameters
-      `conn', 't', and '(\"pong\", \"pong\", \"pong\")
+    - \='list: a single invocation of the callback with parameters
+      `conn', \='t\=', and \='(\"pong\", \"pong\", \"pong\")
 
-    - 'stream: three invocations of the callback, each with
-      parameters `conn', 't', and \"pong\"; the timing of each
+    - \='stream: three invocations of the callback, each with
+      parameters `conn', \='t\=', and \"pong\"; the timing of each
       callback depends on receipt of the response at the client,
       each invocation will be made as soon as the corresponding
       response is available.

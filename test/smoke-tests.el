@@ -4,7 +4,7 @@
 
 (require 'elmpd)
 (setq elmpd-log-level 'debug)
-(setq conn (elmpd-connect :host "192.168.1.6" :port 6600 :local nil
+(setq conn (elmpd-connect :host "127.0.0.1" :port 6600 :local nil
                           :subsystems '(all . (lambda (_ subsys)
                                                 (message "%s changed" subsys)))))
 (elmpd-send conn "play" (lambda (_ ok text) (message "play: %s %s" ok text)))

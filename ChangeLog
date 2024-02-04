@@ -1,3 +1,18 @@
+2024-02-08  Michael Herstine  <sp1ff@pobox.com>
+
+	Fix two nits.
+	This patch corrects a spelling error & removes some commented-out
+	code. Also, update Python version in the melpazoid workflow &
+	update assorted boilerplate.
+
+2021-09-04  Michael Herstine  <sp1ff@pobox.com>
+
+	turn off debug logic in release workflow
+
+	Working on release workflow
+
+	adding a release workflow; first 0.2 release
+
 2021-09-03  Michael Herstine  <sp1ff@pobox.com>
 
 	Minor commit: indentation issues, moved a few defuns so they would be defined before use.

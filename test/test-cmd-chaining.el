@@ -1,6 +1,6 @@
 ;;; test-cmd-chaining.el --- ERT tests for elmpd command chaining  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2020 Michael Herstine <sp1ff@pobox.com>
+;; Copyright (C) 2020-2024 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
 
