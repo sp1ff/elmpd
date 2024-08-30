@@ -1,97 +1,110 @@
 elmpd News -- history of user-visible changes           -*- outline -*-
 
-* 0.2.4 build
+* 0.3 builds
+
+** 0.3.0
+
+*** User-visible changes
+
+**** Add two new functions
+
+Added `elmpd-conn-status' and `elmpd-conn-failed-p'.
+* 0.2 builds
+
+** 0.2.4
 
 No user-visible changes.
-* 0.2.3 build
+** 0.2.3
 
 No user-visible changes.
-* 0.2.2 build
+** 0.2.2
 
-** User-visible changes
+*** User-visible changes
 
-*** Added 'elmpd-chain'
+**** Added 'elmpd-chain'
 
 You can now chain commands with more convenient syntax.
-* 0.2.1 build
+** 0.2.1
 
-** Bug fixes
+*** Bug fixes
 
-*** 'elmpd-send' was sending "noidle" in the old way
-* 0.2.0 build
+**** 'elmpd-send' was sending "noidle" in the old way
+** 0.2.0
 
-** User-visible changes
+*** User-visible changes
 
-*** Support for command-lists
-* 0.1.9 build
+**** Support for command-lists
+* 0.1 builds
 
-** Bug fixes
+** 0.1.9
 
-*** Handle no current command in failure responses
-* 0.1.8 release
+*** Bug fixes
 
-** User-visible changes
+**** Handle no current command in failure responses
+** 0.1.8
 
-*** Minor changes to the docs
-* 0.1.7 build
+*** User-visible changes
 
-** User-visible changes
+**** Minor changes to the docs
+** 0.1.7
 
-*** Byte-compiled functions are handled better when logging
+*** User-visible changes
 
-*** All keyword arguments to `elmpd-connect' are validated
+**** Byte-compiled functions are handled better when logging
+
+**** All keyword arguments to `elmpd-connect' are validated
 
 An error will be signalled if any are un-recognized.
-* 0.1.6 build
+** 0.1.6
 
-** User-visible changes
+*** User-visible changes
 
 The `elmpd' logging facility now takes a facility field; the idea is that packages built on top of `elmpd' can re-use its logging feature while still distinguishing their log statements.
 
-* 0.1.5 build
+** 0.1.5
 
-** User-visible changes
+*** User-visible changes
 
 Callers can explicitly rule-out local sockets by setting `elmpd-socket' to nil before calling `elmpd-connect'.
 
-* 0.1.4 build
+** 0.1.4
 
-** User-visible changes
+*** User-visible changes
 
-*** Support for local Unix sockets
+**** Support for local Unix sockets
 
-* 0.1.3 build
+** 0.1.3
 
-** User-visible changes
+*** User-visible changes
 
-*** Signature change for idle callbacks
+**** Signature change for idle callbacks
 
 This commit changes the signature for idle callbacks; instead of receiving the response text ("changed: foo\nchanged: bar\n...") as its second parameter, it will now receive a list of symbols indicating the changed sub-system(s) (e.g. '(foo bar)).
 
-* 0.1.2 build
+** 0.1.2
 
-** Bug fixes
+*** Bug fixes
 
-*** No longer use regex to find successful responses
+**** No longer use regex to find successful responses
 
 For reasons unknown, the author obtusely chose to use an
 overly-complex regex to detect successful responses. This commit fixes
 that regrettable choice.
 
-* 0.1.1 build
+** 0.1.1
 
-** User-visible changes
+*** User-visible changes
 
-*** Added =elmpd-clear-log=
+**** Added =elmpd-clear-log=
 
-*** =elmpd-connection= objects being pretty-printed in log messages
+**** =elmpd-connection= objects being pretty-printed in log messages
 
-** Bug fixes
+*** Bug fixes
 
-*** "noidle" response not being processed
+**** "noidle" response not being processed
 
 Fixed a nasty bug wherein the "OK\n" response from "noidle" commands wasn't being processed correctly
 
-* 0.1.0 release
+** 0.1.0
 
 Initial release.
