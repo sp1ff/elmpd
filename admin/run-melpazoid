@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# Run melpazoid against elmpd. This script is designed to be run exclusively
+# locally.
+
+set -ex
+
+cd ${HOME}/code/projects/melpazoid
+git pull
+PATH=/opt/emacsen/current/bin:$PATH \
+RECIPE='(elmpd :repo "sp1ff/elmpd" :fetcher github :files ("*.el" (:exclude "elmpd-pkg.el" ".dir-locals.el" "*-tests.el")))' \
+LOCAL_REPO="${HOME}/code/projects/elmpd" \
+python3 melpazoid/melpazoid.py

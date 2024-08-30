@@ -1,0 +1,15 @@
+#!/bin/bash
+
+set -x
+
+# Configure the source tree, build it, test it, and test the distribution tarballs
+make distclean
+
+./bootstrap || exit 1
+./configure || exit 1
+make all || exit 1
+if ! make check; then
+    test -f test/test-suite.log && cat test/test-suite.log
+    exit 1
+fi
+make distcheck

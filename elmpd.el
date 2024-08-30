@@ -355,7 +355,9 @@ an optional callback.  The (optional) third is the callback style; one of
 
 (defun elmpd--process-sentinel (process event)
   "Callback invoked when PROCESS experiences EVENT."
-  (elmpd--log 'info "Process: %s saw the event '%s'." (process-name process) (substring event 0 -1)))
+  (let* ((msg (substring event 0 -1))
+         (level (if (string-prefix-p "failed" msg) 'error 'info)))
+    (elmpd--log level "Process: %s saw the event '%s'." (process-name process) msg)))
 
 (defun elmpd--kick-queue (conn)
   "Move CONN's queue forward.
@@ -781,7 +783,7 @@ as soon as possible."
          ;; socket.  We prefer the Unix socket.
          (fd
           (if (and local (file-exists-p local))
-              (make-network-process :name name :remote local :nowait t)
+              (make-network-process :name name :remote local :nowait t :service t)
             (make-network-process
              :name name
              :host host
@@ -792,7 +794,8 @@ as soon as possible."
            (lambda ()
              (elmpd--log 'info "Finalizing `%s'" fd)
              (delete-process fd))))
-         (conn (elmpd--make-connection :fd fd :inbuf "" :finalize dtor :idle (plist-get args :subsystems))))
+         (conn (elmpd--make-connection :fd fd :inbuf "" :finalize dtor
+                                       :idle (plist-get args :subsystems))))
     (set-process-coding-system fd 'utf-8-unix 'utf-8-unix)
     (set-process-query-on-exit-flag fd nil)
     (set-process-sentinel fd 'elmpd--process-sentinel)
@@ -885,8 +888,8 @@ depend on the responses to prior commands, consider
           ;;
           ;;     1. `q' is empty & we're not expecting any MPD output
           ;;
-          ;;      2. `q' is non-empty & we're waiting for the result
-          ;;         of the command at its head
+          ;;     2. `q' is non-empty & we're waiting for the result
+          ;;        of the command at its head
           (unless q
             ;; We're idling-- kick off this command.
             (elmpd--kick-queue conn))))))
@@ -895,17 +898,25 @@ depend on the responses to prior commands, consider
   "Return the present length of CONN's queue."
   (length (elmpd-connection--q conn)))
 
+(defun elmpd-conn-status (conn)
+  "Return the process status for CONN."
+  (process-status (elmpd-connection--fd conn)))
+
+(defun elmpd-conn-failed-p (conn)
+  "Return t if CONN failed to connect, nil else."
+  (eq 'failed (elmpd-conn-status conn)))
+
 (defmacro elmpd-chain (conn &rest chain)
   "Chain multiple MPD commands on CONN conveniently.  See below for CHAIN.
 
 Sending multiple, un-connected commands to MPD is simple: use a
 command list:
 
-    (elmpd-send conn '(\"foo\" \"bar\" \"splat\")...)
+    (elmpd-send conn \='(\"foo\" \"bar\" \"splat\")...)
 
 But what if you need to send a command, process the response, and
 send another command whose contents depends upon the response to
-the first? Then you're reduced to writing things like:
+the first? Then you\='re reduced to writing things like:
 
     (elmpd-send
       conn
@@ -936,7 +947,7 @@ CMD may be any of:
     3. a list with three elements (`cmd' `cb' `style')
 
 In any case, `cmd' may be either a string or a list of strings.
-In case 3, if `cmd' is a string, then `style' must be 'default.
+In case 3, if `cmd' is a string, then `style' must be \='default.
 Note that the callback will be invoked with just two
 arguments (the connection and the response), since it will only
 be invoked on success (you can place failure logic in an :or-else

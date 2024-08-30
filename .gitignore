@@ -10,3 +10,4 @@ env.sh
 *.bz2
 *.gz
 *.xz
+*.zst
