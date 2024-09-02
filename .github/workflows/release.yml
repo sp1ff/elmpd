@@ -107,21 +107,10 @@ jobs:
         automake --version
         ./bootstrap && ./configure
         make all check dist
-        echo "DISTRO_BZ2=elmpd-${{ env.RELEASE_VERSION }}.tar.bz2" >> $GITHUB_ENV
         echo "DISTRO_GZ=elmpd-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_ENV
         echo "DISTRO_XZ=elmpd-${{ env.RELEASE_VERSION }}.tar.xz" >> $GITHUB_ENV
         echo "DISTRO_ZSTD=elmpd-${{ env.RELEASE_VERSION }}.tar.zst" >> $GITHUB_ENV
-        # echo "DISTRO_PKG=elmpd-${{ env.RELEASE_VERSION }}.tar" >> $GITHUB_ENV
-
-    - name: Upload bzip2 tarball
-      uses: actions/upload-release-asset@v1.0.1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-        asset_path: ${{ env.DISTRO_BZ2 }}
-        asset_name: ${{ env.DISTRO_BZ2 }}
-        asset_content_type: application/octet-stream
+        echo "DISTRO_PKG=elmpd-${{ env.RELEASE_VERSION }}.tar" >> $GITHUB_ENV
 
     - name: Upload gzip tarball
       uses: actions/upload-release-asset@v1.0.1
@@ -153,12 +142,12 @@ jobs:
         asset_name: ${{ env.DISTRO_ZSTD }}
         asset_content_type: application/octet-stream
 
-    # - name: Upload the Emacs package
-    #   uses: actions/upload-release-asset@v1.0.1
-    #   env:
-    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    #   with:
-    #     upload_url: ${{ env.RELEASE_UPLOAD_URL }}
-    #     asset_path: ${{ env.DISTRO_PKG }}
-    #     asset_name: ${{ env.DISTRO_PKG }}
-    #     asset_content_type: application/octet-stream
+    - name: Upload the Emacs package
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ env.RELEASE_UPLOAD_URL }}
+        asset_path: ${{ env.DISTRO_PKG }}
+        asset_name: ${{ env.DISTRO_PKG }}
+        asset_content_type: application/octet-stream
