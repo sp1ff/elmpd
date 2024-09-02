@@ -1,0 +1,59 @@
+name: ci
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, edited, reopened] # don't say `synchronize`-- that is taken care of by `push`
+  push:
+  schedule:
+    - cron: '42 02 * * *'
+
+jobs:
+
+  # These all seem to run in `/home/runner/work/elmpd/elmpd`
+  lint_and_test:
+    name: Lint & Test
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Install tooling
+        shell: bash
+        run: |
+          set -ex
+          pwd
+          sudo apt-get update
+          sudo apt-get upgrade
+          sudo apt-get install -y autoconf automake texlive emacs
+          echo "Will now use the emacs at $(type -p emacs): $(emacs --version|head -n1)"
+
+      - name: Install a modern version of automake
+        shell: bash
+        run: |
+          set -ex
+          cd /tmp
+          curl -L -O https://ftp.gnu.org/gnu/automake/automake-1.16.4.tar.xz
+          tar -xf automake-1.16.4.tar.xz
+          cd automake-1.16.4
+          ./configure && make
+          sudo make install
+          hash -r
+          echo "Will now use the automake at $(type -p automake): $(automake --version|head -n1)"
+
+      - name: Lint
+        shell: bash
+        run: |
+          set -ex
+          admin/run-linters
+
+      - name: Test
+        shell: bash
+        run: |
+          set -ex
+          admin/configure-to-distcheck
+
+          

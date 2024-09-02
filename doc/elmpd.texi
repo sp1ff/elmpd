@@ -1,0 +1,524 @@
+\input texinfo   @c -*- texinfo -*-
+@c %**start of header
+@setfilename elmpd.info
+@settitle elmpd
+@include version.texi
+@c %**end of header
+
+@dircategory Emacs
+@direntry
+* elmpd: (elmpd). A tight, ergonomic, async client library for mpd.
+@end direntry
+
+@copying
+This manual corresponds to elmpd version @value{VERSION}.
+
+Copyright @copyright{} 2024 Michael Herstine <sp1ff@@pobox.com>
+
+@quotation
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU
+Free Documentation License''.
+
+A copy of the license is also available from the Free Software
+Foundation Web site at @url{https://www.gnu.org/licenses/fdl.html}.
+
+@end quotation
+
+This document was typeset with
+@uref{http://www.texinfo.org/, GNU Texinfo}.
+
+@end copying
+
+@c title & copyright-- won't appear in online output.
+@titlepage
+@title elmpd
+@subtitle A tight, ergonomic, async client library for mpd
+@author @email{sp1ff@@pobox.com}
+@page
+@vskip 0pt plus 1filll
+@insertcopying
+@end titlepage
+
+@c Output the table of the contents at the beginning.
+@contents
+
+@c ``top'' node-- this is the start of the online output, but doesn't
+@c appear in the printed manual
+@ifnottex
+@node Top
+@top elmpd
+
+A tight, ergonomic, async client library for mpd.
+
+This manual corresponds to elmpd version @value{VERSION}.
+
+@end ifnottex
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* Introduction::
+* Why Another MPD Client Library?::
+* Using the Package::
+* Roadmap & Contributing::
+* Index::
+* Function Index::
+@end menu
+
+@node Introduction
+@chapter Introduction
+
+@cindex MPD
+The @url{https://www.musicpd.org, Music Player Daemon} (or
+MPD) is a ``flexible, powerful, server-side application for playing
+music.'' It offers an
+@url{https://mpd.readthedocs.io/en/latest/protocol.html, API} for
+interacting with the daemon & building client applications.
+
+elmpd is an
+@url{https://www.gnu.org/software/emacs/manual/html_mono/elisp.html,
+Emacs Lisp} package for talking to an MPD instance over that protocol.
+It is a small, asynchronous, minimalist implementation designed for
+lightweight apps.
+
+@cindex libmpdel
+@cindex libmpdee
+@cindex mpc
+The reader may also be interested in
+@url{https://gitea.petton.fr/mpdel/libmpdel, libmpdel},
+@url{https://github.com/andyetitmoves/libmpdee,libmpdee}, and the
+@code{mpc} package which ships with Emacs beginning in version 23.2.
+
+Instructions for obtaining & installing the package may be found in the
+@url{https://github.com/sp1ff/elmpd, README}. The motivation for yet
+another Emacs Lisp MPD client library may be found @ref{Why Another MPD
+Client Library?, below}. The reader eager to begin coding should proceed
+to @ref{Using the Package}.
+
+@node Why Another MPD Client Library?
+@chapter Why Another MPD Client Library?
+
+elmpd was borne of experimentation with the other client packages listed
+@ref{Introduction, above}; as I fine-tuned my workflow, I found myself
+wanting @emph{less} functionality: rather than interacting with a
+fully-featured client, I just wanted to skip to the next song while I
+was editing code with a quick key chord, for example. I customize my
+mode line heavily, and I wanted just a little bit of logic to add the
+current track to the mode line & keep it up-to-date as MPD progressed
+through the playlist. I have written a
+@cindex mpdpopm
+@url{https://github.com/sp1ff/mpdpopm, companion daemon} to MPD that
+maintains ratings & play counts; I just needed a little function that
+would let me rate the current track while I was, say, reading mail.
+
+My next move was to read through a number of client libraries for
+inspiration, both in C & Emacs Lisp. Many of them had strong opinions on
+how one should talk to MPD. Having been programming MPD for a while I
+had come to appreciate its simplicity (after all, one can program it
+from bash by simply echoing commands to @code{/dev/tcp/$host/$port}). My
+experience with async Rust inspired me to see how simple I could make
+this. Each elmpd connection consumes a socket & optionally a callback--
+that’s it (no buffer, no transaction queue). Put another way, if other
+libraries are Gnus (featureful, encourages you to read your e-mail in a
+certain way), then elmpd is Mailutils (small utilities that leave it up
+to the user to assemble them into something useful).
+
+@node Using the Package
+@chapter Using the Package
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* Connecting to an MPD Instance::
+* Connection Idioms::
+* Sending Commands::
+@end menu
+
+@cindex connecting
+@node Connecting to an MPD Instance
+@section Connecting to an MPD Instance
+
+Create an MPD connection by calling @code{elmpd-connect}. This will
+return an @code{elmpd-connection} instance immediately; asynchronously,
+it will be parsing the MPD greeting message, perhaps sending an initial
+password, and if so requested, sending the ``idle'' command.
+
+@deffn API elmpd-connect kwargs
+Connect to an MPD server according to @var{kwargs}, which shall be a
+list of keyword arguments:
+
+    :name The name by which to refer to the underlying network process;
+    it will be modified as necessary to make it unique. If not
+    specified, it defaults to ``*elmpd-connection*''.
+
+    :host The host on which the MPD server resides; if not given, it
+    defaults first to the environment variable @code{MPD_HOST}, and then
+    to ``localhost''.
+
+    :port The port on which MPD is listening. If not given, it defaults
+    to the environment variable @code{MPD_PORT}, then to the value 6600.
+
+    :local The path to the Unix socket on which MPD is listening. This
+    argument is mutually exclusive with :host & :port. This option is
+    preferred, so to force a TCP connection, pass this explicitly as
+    @code{nil}.
+
+    :password If given, the ``password'' command shall be issued after
+    the initial connection is made with this parameter; this should of
+    course only be done over an encrypted connection, such as port
+    forwarding over SSH.
+
+    :subsystems If given, this connection will perpetually idle;
+    whenever a command is issued on this connection, a ``noidle''
+    command shall be given, followed by the command. When that command
+    completes, the ``idle'' command will be re-issued specifying the
+    same subsystems. This argument shall be a cons cell whose car is
+    either the symbol @code{'all}, the symbol representing the subsystem
+    of interest, or a list of symbols naming the subsystems of interest
+    (e.g. @code{'(player mixer output)}) and whose cdr is a callback to
+    be invoked when any of those subsystems change; the callback shall
+    take two parameters the first of which will be the
+    @code{elmpd-connection} which saw the state change & the second of
+    which will be either a single symbol or a list of symbols naming the
+    changed subsystems.
+@end deffn
+
+A few examples follow. To attempt to connect to the ``default'' MPD
+instance, say:
+
+@lisp
+(elmpd-connect)
+@end lisp
+
+This will attempt to connect first to the Unix socket at
+@code{/var/run/mpd/socket}, and failing that, to the TCP/IP socket at
+
+@lisp
+(or (getenv ``MPD_HOST'') ``localhost'')
+@end lisp
+
+at port
+
+@lisp
+(or (getenv ``MPD_PORT'') ``6600'')
+@end lisp
+
+To force a connection to the MPD instance on localhost at port 1234, and
+to create a connection that will, in between explicit commands, idle on
+subystems options, player and sticker, and invoke a function named
+@code{my-callback} when any one of those subsystems changes:
+
+@lisp
+(elmpd-connect :local nil :port 1234 :subsystems '((options player sticker) . #'my-callback))
+@end lisp
+
+The available symbols naming subsystems:
+
+@itemize
+@item database
+@item update
+@item stored
+@item playlist
+@item player
+@item mixer
+@item output
+@item options
+@item partition
+@item sticker
+@item subscription
+@item message
+@item neighbor
+@item mount
+@end itemize
+
+@deftp API elmpd-connection
+@code{elpmd-connect} returns an @code{elmpd-connection} instance,
+an opaque type representing an MPD connection.
+@end deftp
+
+As already mentioned, the connection object will still be in the process
+of construction on return. The caller is free to send commands through
+the connection immediately; they will be queued up & sent as soon as
+possible.
+
+@cindex zombie connections
+If the MPD server is down, or the @code{elmpd-connect} arguments are
+incorrect, the connection will never be made; the connection will be
+stalled in the @code{'failed} state, with any commands issued so far
+stuck in its queue. Since the failure will take place asynchronously,
+there is no convenient point at which to detect this; it is up to the
+caller to at some point, perhaps periodically, query the connection
+state, detect this & correct it.
+
+@deffn API elmpd-conn-status conn
+Returns a symbol representing the process status for @var{conn}, as
+defined by @code{process-status} (@pxref{Process Information,
+process-status, process-status, elisp, Emacs Lisp})
+@end deffn
+
+@deffn API elmpd-conn-failed-p conn
+Returns @code{#t} if @var{conn}'s connection status is @code{'failed},
+@code{nil} else.
+@end deffn
+
+@cindex connecting
+@node Connection Idioms
+@section Connection Idioms
+
+Among MPD clients, there are two idioms for sending commands while
+receiving notifications of server-side changes:
+
+@enumerate
+
+@item
+just maintain two connections
+@cindex mpdfav
+(e.g. @url{https://github.com/vincent-petithory/mpdfav,mpdfav}); issue
+the “idle” command on one, send commands on the other
+
+@item
+use one connection, issue the ``idle'' command, and when asked to issue
+another command, send ``noidle'', issue the requested command, collect
+the response, and then send ``idle'' again (e.g.
+@cindex libmpdel
+@url{https://gitea.petton.fr/mpdel/libmpdel,libmpdel}). Note that this
+is not a race condition per the MPD
+@url{https://www.musicpd.org/doc/html/protocol.html#idle,docs} -- any
+server-side changes that took place while processing the command will be
+saved & returned on ``idle''
+
+@end enumerate
+
+As a library, elmpd does not make that choice, but rather supports both
+styles. To create a connection in the second style, supply the
+@code{:subsystems} argument. To create a connection solely for
+dispatching commands, omit it.
+
+@node Sending Commands
+@section Sending Commands
+
+@c Generate the nodes for this menu with `C-c C-u C-m'.
+@menu
+* Simple Commands::
+* Command Lists::
+* The elmpd-chain Macro::
+@end menu
+
+@cindex simple commands
+@node Simple Commands
+@subsection Simple Commands
+
+Once you've established a connection, send a command via
+@code{elmpd-send}. For instance,
+
+@lisp
+(let ((conn (elmpd-connect :host "localhost")))
+  (elmpd-send conn "play"))
+@end lisp
+
+will send the ``play'' command to the MPD instance on localhost at port
+6600 (assuming no Unix socket). Note that this code will likely return
+before anything actually happens. As mentioned @ref{Connecting to an MPD
+Instance, above}, @code{elmpd-connect} returns immediately after
+creating the network process; it only reads & parses the MPD greeting
+asynchronously. Likewise, @code{elmpd-send} only queues up the ``play''
+command; it will actually be sent & its response read in the background.
+
+If you’d like to do something with the response, you can provide a
+callback:
+
+@lisp
+(let ((conn (elmpd-connect :host "localhost")))
+  (elmpd-send 
+   conn
+   "getvol"
+   (lambda (_conn ok rsp)
+     (if ok (message "volume is %s" (substring rsp 7))
+       (error "Failed to get volume: %s" rsp)))))
+@end lisp
+
+The callback is invoked with the @code{elmpd-connection} on which
+the command was sent, a boolean indicating success or failure of
+the command, and either the server response (on success) or the
+server error message (on failure).
+
+@cindex command lists
+@node Command Lists
+@subsection Command Lists
+
+MPD makes provision for packaging-up multiple commands in one shot:
+@url{https://mpd.readthedocs.io/en/latest/protocol.html#command-lists,
+command lists}. To issue a command list rather than an individual
+command, specify a list of string instead of just a string:
+
+@lisp
+(let ((conn (elmpd-connect :host "localhost")))
+  (elmpd-send 
+   conn
+   '("random 1" "consume 1" "crossfade 5" "play")))
+@end lisp
+
+will send the following to the local MPD daemon:
+
+@example
+command_list_begin
+random 1
+consume 1
+crossfade 5
+play
+command_list_end
+@end example
+
+This presents a few options as to how the results can be processed if
+a callback is provided. The keyword argument @code{:response} selects
+among them:
+
+@enumerate
+
+@item
+@code{'default}: The command list will be initiated with
+@code{command_list_begin} (which results in a single response for the
+entire list). The callback will be invoked once in the same manner as
+simple commands: i.e. with the connection, result and either response or
+error message.
+
+@item
+@code{'list}: The callback will be invoked once with the connection, a boolean
+result code, and a list of responses to each individual command in the list
+(the command list will be started with @code{command_list_ok_begin} producing
+a result for each command in the list).
+
+@item
+@code{'stream}: The callback will be invoked once for each completed
+command in the list with three parameters: the connection, a boolean
+indicating success or failure, and the individual command result or
+error message (the command list will be started with
+@code{command_list_ok_begin}).
+
+@end enumerate
+
+@deffn API elmpd-send conn cmd cb kwargs
+Send MPD command @var{cmd} on @var{conn}. If the optional @var{cb} is
+given, it shall be a callback to be invoked with the command results.
+The @code{:response} keyword argument describes the way in which the
+callback will be invoked for command lists. @code{:response} may be one
+of @code{'default} (the default), @code{'list} or @code{'stream}.
+@end deffn
+
+@cindex elmpd-chain
+@node The elmpd-chain Macro
+@subsection The elmpd-chain Macro
+
+It sometimes happens that one would like to issue a command depending
+on the results of a prior command, for instance the following snippet
+will raise the volume to fifty if it's not already at least that high
+already:
+
+@lisp
+(let ((conn (elmpd-connect :host "localhost")))
+  (elmpd-send 
+   conn
+   "getvol"
+   (lambda (_conn ok rsp)
+     (if ok
+         (let ((vol (string-to-number (substring rsp 7 -1))))
+           (if (< vol 50)
+               (elmpd-send
+                conn
+                "setvol 50"
+                (lambda (_conn ok rsp)
+                  (if ok
+                      (message "Increased volume from %d to 50." vol)
+                    (message "Failed to increase volume: %s" rsp))))))
+       (error "Failed to get volume: %s" rsp)))))
+@end lisp
+
+This quickly becomes inconvenient & difficult to read. In any such
+non-trivial case, the @code{elmpd-chain} macro can make this easier:
+
+@lisp
+(let ((conn (elmpd-connect :host "localhost"))
+      (vol 0))
+  (elmpd-chain
+   conn
+   ("getvol"
+    (lambda (_conn rsp)
+      (setq vol (string-to-number (substring rsp 7 -1)))))
+   :or-else
+   (lambda (_conn rsp) (error "Failed to get volume: %s" rsp))
+   :and-then
+   ((format "setvol %d" (max 50 vol))
+    (lambda (_ _) (message "Set volume to %d." vol)))
+   :or-else
+   (message "Failed to increase volume: %s" rsp)))
+@end lisp
+
+The general format is:
+
+@cindex elmpd-chain
+@lisp
+(elmpd-chain
+ conn
+ CMD
+ [:or-else ELSE-HANDLER]
+ [:and-then
+   [CMD OR-ELSE? AND-THEN...])
+@end lisp
+
+where CMD may be any of:
+
+@enumerate
+
+@item
+A single value @code{cmd}
+
+@item
+a list with two elements @code{cmd, cb}
+
+@item
+a list with three elements @code{cmd, cb, style}
+
+@end enumerate
+
+In any case, @code{cmd} may be either a string (for a simple command),
+or a list of strings (for a command list). In case 3, if @code{cmd} is a
+string, then @code{style} must be @code{'default}. Note that the
+callback will be invoked with just two arguments (the connection and the
+response), since it will only be invoked on success (you can place
+failure logic in an :or-else clause). Similarly, :or-else handlers are
+also invoked with just two arguments, since it will only be invoked on
+failure.
+
+@defmac elmpd-chain conn args
+Chain multiple commands on @var{conn}.
+@end defmac
+
+@node Roadmap & Contributing
+@chapter Roadmap & Contributing
+
+elmpd was first released in mid-2020, and saw development through the
+rest of the year. Things have been quiet since the end of that year with
+the addition of @code{elmpd-chain}. In September of '24 I decided to
+finally call this ``1.0'', implying a certain level of stability (and
+notably will respect semver going forward).
+
+Bugs & feature requests are welcome in the
+@url{https://github.com/sp1ff/elmpd/issues, Issues} section of the
+project. Also, you can just reach out directly at
+@email{sp1ff@@pobox.com}, or shoot a webmention to me at my
+@url{https://www.unwoundstack.com,web site}.
+
+@node Index
+@unnumbered Index
+
+@printindex cp
+
+@node Function Index
+@unnumbered Function Index
+
+@printindex fn
+
+@bye
+

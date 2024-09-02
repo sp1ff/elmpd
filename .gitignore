@@ -9,5 +9,6 @@ configure
 env.sh
 *.bz2
 *.gz
+*.tar
 *.xz
 *.zst
