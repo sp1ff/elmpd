@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2024-09-02 Mon 07:53>
+#+DATE: <2024-09-02 Mon 08:14>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -26,14 +26,14 @@ The simplest way to install [[https://github.com/sp1ff/elmpd][elmpd]] is from [[
 You can also install the package manually. Download the .tar file from [[https://github.com/sp1ff/elmpd/releases][Github]] or my personal [[https://www.unwoundstack/distros.html][page]] and say:
 
 #+BEGIN_SRC elisp
-  (package-install-file "elmpd-0.3.1.tar")
+  (package-install-file "elmpd-1.0.0.tar")
 #+END_SRC
 
 I'm now making GitHub releases that include Autotools source distributions:
 
 #+BEGIN_SRC bash
-curl -L --output elmpd-0.3.1.tar.gz https://github.com/sp1ff/elmpd/releases/download/0.3.1/elmpd-0.3.1.tar.gz  
-tar xf elmpd-0.3.1.tar.gz && cd elmpd-0.3.1
+curl -L --output elmpd-1.0.0.tar.gz https://github.com/sp1ff/elmpd/releases/download/1.0.0/elmpd-1.0.0.tar.gz  
+tar xf elmpd-1.0.0.tar.gz && cd elmpd-1.0.0
 ./configure && make all check
 sudo make install
 #+END_SRC
