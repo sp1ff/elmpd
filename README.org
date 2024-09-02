@@ -1,6 +1,6 @@
 #+TITLE: elmpd
 #+DESCRIPTION: A tight, async mpd library in Emacs Lisp
-#+DATE: <2024-09-01 Sun 17:59>
+#+DATE: <2024-09-02 Mon 07:53>
 #+AUTHOR: sp1ff
 #+EMAIL: sp1ff@pobox.com
 #+AUTODATE: t
@@ -50,17 +50,17 @@ sudo make install
 * Getting Started
 
 User documentation is provided with the package, and may also be found
-[[https://unwoundstack.com/doc/elmpd/curr/elmpd.html][here]].
+[[https://unwoundstack.com/doc/elmpd/curr][here]].
 * Motivation & Design Philosphy
 
 [[https://github.com/DamienCassou][Damien Cassou]], the author of [[https://github.com/mpdel/mpdel][mpdel]] and [[https://gitea.petton.fr/mpdel/libmpdel][libmpdel]], [[https://github.com/sp1ff/elmpd/issues/1][reached out]] to ask "Why elmpd?" His question prompted me to clarify my thoughts around this project & I've adapted my response here.
 
 I've looked at a few [[https://www.musicpd.org/][MPD]] clients, including [[https://github.com/mpdel/mpdel][mpdel]]. As I fine-tuned my workflow, however, I found myself wanting _less_ functionality: rather than interacting with a fully-featured client, I just wanted to skip to the next song while I was editing code, for example. I customize my mode line heavily, and I wanted just a little bit of logic to add the current track to the mode line & keep it up-to-date. I have written a companion [[https://github.com/sp1ff/mpdpopm][daemon]] to MPD that maintains ratings & play counts; I just needed a little function that would let me rate the current track while I was reading mail, for instance.
 
-My next move was to read through a number of client libraries for inspiration, both in C & Emacs LISP. Many of them had strong opinions on how one should talk to MPD. Having been programming MPD for a while I had come to appreciate its simplicity (after all, one can program it from bash by simply =echo=-ing  commands to =/dev/tcp/$host/$port=). My experience with async Rust inspired me to see how simple I could make this. =elmpd= exports two primary functions: =elmpd-connect= & =elmpd-send=. Each connection consumes a socket & optionally a callback-- that's it; no buffer, no transaction queue. Put another way, if other libraries are Gnus (featureful, encourages you to read your e-mail in a certain way), then elmpd is [[https://mailutils.org/][Mailutils]] (small utilities that leave it up to the user to assemble them into something useful).
+My next move was to read through a number of client libraries for inspiration, both in C & Emacs Lisp. Many of them had strong opinions on how one should talk to MPD. Having been programming MPD for a while I had come to appreciate its simplicity (after all, one can program it from bash by simply =echo=-ing  commands to =/dev/tcp/$host/$port=). My experience with async Rust inspired me to see how simple I could make this. =elmpd= exports two primary functions: [[https://unwoundstack.com/doc/elmpd/curr#index-elmpd_002dconnect][elmpd-connect]] & [[https://unwoundstack.com/doc/elmpd/curr#index-elmpd_002dsend][elmpd-send]]. Each connection consumes a socket & optionally a callback-- that's it; no buffer, no transaction queue. Put another way, if other libraries are Gnus (featureful, encourages you to read your e-mail in a certain way), then elmpd is [[https://mailutils.org/][Mailutils]] (small utilities that leave it up to the user to assemble them into something useful).
 * Status & Roadmap
 
-As of September 2024 I'm calling this "1.0". The package is ripe for being used to build up a more caller-friendly API: =(something-play)= instead of:
+The package has been stable for a few years now, so as of  September 2024 I'm calling this "1.0". It's ripe for being used to build up a more caller-friendly API: something like =(play)= instead of
 
 #+BEGIN_SRC elisp
   (let ((conn (elmpd-connect)))
