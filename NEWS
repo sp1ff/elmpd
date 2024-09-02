@@ -2,11 +2,16 @@ elmpd News -- history of user-visible changes           -*- outline -*-
 
 * 0.3 builds
 
+** 0.3.1
+
+*** User-visible changes
+
+**** Added a brief Texinfo manual
 ** 0.3.0
 
 *** User-visible changes
 
-**** Add two new functions
+**** Added two new functions
 
 Added `elmpd-conn-status' and `elmpd-conn-failed-p'.
 * 0.2 builds

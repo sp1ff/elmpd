@@ -1,3 +1,23 @@
+2024-09-01  Michael Herstine  <sp1ff@pobox.com>
+
+	Cut release 0.3.1
+
+	Add a Texinfo manual to the project.
+	This patch will also add a Github Actions workflow `ci` that will
+	be run on push, PR, &c.
+
+2024-08-30  Michael Herstine  <sp1ff@pobox.com>
+
+	Cutting release 0.3.0
+
+2024-08-29  Michael Herstine  <sp1ff@pobox.com>
+
+	Add two new functions: `elmpd-conn-status' and `elmpd-conn-failed-p'.
+	This patch adds two new utility functions for checking the status
+	of an elmpd connection. In addition it tidies up several docstrings,
+	and adds some utility scripts (under 'admin') for validating
+	commits.
+
 2024-02-08  Michael Herstine  <sp1ff@pobox.com>
 
 	Fix two nits.
