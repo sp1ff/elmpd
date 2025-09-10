@@ -1,3 +1,11 @@
+2025-09-09  Michael Herstine  <sp1ff@pobox.com>
+
+	Cut release 1.0.1
+
+	Hygienic commit.
+	This patch introduces no new functionality; it just updates
+	copyright statements, the README &c.
+
 2024-09-02  Michael Herstine  <sp1ff@pobox.com>
 
 	Cut release 1.0

@@ -3,7 +3,7 @@
 ;; Copyright (C) 2020-2025 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
-;; Version: 1.0.0
+;; Version: 1.0.1
 ;; Keywords: comm
 ;; Package-Requires: ((emacs "25.1"))
 ;; URL: https://github.com/sp1ff/elmpd
@@ -67,7 +67,7 @@
 
 (require 'cl-lib)
 
-(defconst elmpd-version "1.0.0")
+(defconst elmpd-version "1.0.1")
 
 ;;; Logging-- useful for debugging asynchronous functions
 

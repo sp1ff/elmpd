@@ -2,6 +2,9 @@ elmpd News -- history of user-visible changes           -*- outline -*-
 
 * 1.0 releases
 
+** 1.0.1
+
+This is a hygienic release only; no new functionality.
 ** 1.0.0
 
 First "1.0" release.
