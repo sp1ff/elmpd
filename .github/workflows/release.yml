@@ -20,7 +20,6 @@ jobs:
   # This job will actually create the artifacts I want to include with the release
   build-release:
     name: build-release
-    needs: ['create-release']
     runs-on: ubuntu-latest
     steps:
     - name: Checkout repo
@@ -57,6 +56,7 @@ jobs:
   # This job will create the GitHub release
   create-release:
     name: create-release
+    needs: ['build-release']
     runs-on: ubuntu-latest
     # Un-comment this for testing
     env:
