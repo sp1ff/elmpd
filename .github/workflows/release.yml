@@ -53,6 +53,11 @@ jobs:
         ./bootstrap && ./configure
         make all check dist
 
+    # Un-comment this step to enable ssh'ing into the runner & trouble-shooting
+    - name: Setup tmate session
+      if: matrix.os == 'macos-latest'
+      uses: mxschmitt/action-tmate@v3
+
   # This job will create the GitHub release
   create-release:
     name: create-release
