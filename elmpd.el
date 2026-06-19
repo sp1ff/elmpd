@@ -1,6 +1,6 @@
 ;;; elmpd.el --- A tight, ergonomic, async client library for mpd  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2020-2025 Michael Herstine <sp1ff@pobox.com>
+;; Copyright (C) 2020-2026 Michael Herstine <sp1ff@pobox.com>
 
 ;; Author: Michael Herstine <sp1ff@pobox.com>
 ;; Version: 1.0.1
