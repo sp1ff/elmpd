@@ -55,7 +55,6 @@ jobs:
 
     # Un-comment this step to enable ssh'ing into the runner & trouble-shooting
     - name: Setup tmate session
-      if: matrix.os == 'ubuntu-latest'
       uses: mxschmitt/action-tmate@v3
 
   # This job will create the GitHub release
